@@ -1,0 +1,33 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+}
+
+/* 응시 화면(다크 IDE) 전용 스크롤바 */
+.dark-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.dark-scroll::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border-radius: 4px;
+}
+.dark-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.prose pre {
+  @apply bg-slate-900 text-slate-100 rounded-lg;
+}
+.prose code {
+  @apply text-pink-600;
+}
+.prose pre code {
+  @apply text-slate-100;
+}

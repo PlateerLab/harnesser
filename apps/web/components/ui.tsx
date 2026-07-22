@@ -1,0 +1,132 @@
+"use client";
+
+import { ReactNode } from "react";
+
+export function Spinner({ label }: { label?: string }) {
+  return (
+    <div className="flex items-center justify-center gap-2 py-16 text-slate-500">
+      <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
+      {label && <span className="text-sm">{label}</span>}
+    </div>
+  );
+}
+
+export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return (
+    <div className={`rounded-xl border border-slate-200 bg-white shadow-sm ${className}`}>{children}</div>
+  );
+}
+
+const badgeColors: Record<string, string> = {
+  // verdict
+  AC: "bg-emerald-100 text-emerald-700",
+  WA: "bg-red-100 text-red-700",
+  CE: "bg-amber-100 text-amber-700",
+  RE: "bg-orange-100 text-orange-700",
+  TLE: "bg-purple-100 text-purple-700",
+  IE: "bg-slate-200 text-slate-600",
+  // difficulty
+  easy: "bg-emerald-100 text-emerald-700",
+  medium: "bg-amber-100 text-amber-700",
+  hard: "bg-red-100 text-red-700",
+  // status
+  in_progress: "bg-blue-100 text-blue-700",
+  submitted: "bg-emerald-100 text-emerald-700",
+  expired: "bg-slate-200 text-slate-600",
+  // mode
+  standard: "bg-slate-100 text-slate-700",
+  ai_assisted: "bg-violet-100 text-violet-700",
+  // role
+  admin: "bg-red-100 text-red-700",
+  evaluator: "bg-blue-100 text-blue-700",
+  candidate: "bg-slate-100 text-slate-700",
+};
+
+export function Badge({ value, label }: { value: string; label?: string }) {
+  const color = badgeColors[value] || "bg-slate-100 text-slate-700";
+  return (
+    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${color}`}>
+      {label ?? value}
+    </span>
+  );
+}
+
+export function Button({
+  children,
+  onClick,
+  variant = "primary",
+  disabled,
+  type = "button",
+  className = "",
+}: {
+  children: ReactNode;
+  onClick?: () => void;
+  variant?: "primary" | "secondary" | "danger" | "ghost";
+  disabled?: boolean;
+  type?: "button" | "submit";
+  className?: string;
+}) {
+  const styles = {
+    primary: "bg-slate-900 text-white hover:bg-slate-700 disabled:bg-slate-400",
+    secondary: "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:text-slate-400",
+    danger: "bg-red-600 text-white hover:bg-red-500 disabled:bg-red-300",
+    ghost: "text-slate-600 hover:bg-slate-100 disabled:text-slate-300",
+  }[variant];
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      className={`rounded-lg px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed ${styles} ${className}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+export function Field({
+  label,
+  children,
+  hint,
+}: {
+  label: string;
+  children: ReactNode;
+  hint?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-sm font-medium text-slate-700">{label}</span>
+      {children}
+      {hint && <span className="mt-1 block text-xs text-slate-400">{hint}</span>}
+    </label>
+  );
+}
+
+export const inputCls =
+  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none";
+
+export function Modal({
+  title,
+  children,
+  onClose,
+}: {
+  title: string;
+  children: ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="mb-4 text-lg font-bold">{title}</h3>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export function EmptyState({ message }: { message: string }) {
+  return <div className="py-16 text-center text-sm text-slate-400">{message}</div>;
+}
