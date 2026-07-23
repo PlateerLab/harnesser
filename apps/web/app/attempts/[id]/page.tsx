@@ -21,8 +21,67 @@ import { Badge, Spinner } from "@/components/ui";
 
 const SNAPSHOT_INTERVAL_MS = 20_000; // 리뷰 타임라인용 주기 스냅샷
 const STATE_SAVE_DEBOUNCE_MS = 1_500; // 편집 멈춤 후 상태 저장 (새로고침 복원용)
+const LAYOUT_KEY = "harnesser:exam-layout";
 
 type CodeState = Record<string, { language: Language; codeByLang: Record<string, string> }>;
+
+interface Layout {
+  leftPct: number; // 지문 영역 너비 (%)
+  chatW: number; // AI 패널 너비 (px)
+  consoleH: number; // 실행 결과 높이 (px)
+}
+
+const DEFAULT_LAYOUT: Layout = { leftPct: 38, chatW: 416, consoleH: 224 };
+
+const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+
+function sanitizeLayout(raw: unknown): Layout {
+  const o = (raw ?? {}) as Partial<Record<keyof Layout, unknown>>;
+  const num = (v: unknown, fallback: number) => (typeof v === "number" && isFinite(v) ? v : fallback);
+  return {
+    leftPct: clamp(num(o.leftPct, DEFAULT_LAYOUT.leftPct), 18, 60),
+    chatW: clamp(num(o.chatW, DEFAULT_LAYOUT.chatW), 280, 720),
+    consoleH: clamp(num(o.consoleH, DEFAULT_LAYOUT.consoleH), 96, 800),
+  };
+}
+
+/** 패널 구분선 — 호버 시 강조, 드래그로 크기 조절 (포인터 캡처로 Monaco 위에서도 안정) */
+function Divider({
+  orientation,
+  onMove,
+}: {
+  orientation: "vertical" | "horizontal";
+  onMove: (clientX: number, clientY: number) => void;
+}) {
+  const [dragging, setDragging] = useState(false);
+  const base =
+    "relative z-20 shrink-0 transition-colors " +
+    (dragging ? "bg-violet-500" : "bg-slate-700/70 hover:bg-violet-500/80");
+  const dims =
+    orientation === "vertical"
+      ? "w-1 cursor-col-resize after:absolute after:inset-y-0 after:-left-1.5 after:-right-1.5"
+      : "h-1 cursor-row-resize after:absolute after:inset-x-0 after:-top-1.5 after:-bottom-1.5";
+  return (
+    <div
+      className={`${base} ${dims} after:content-['']`}
+      onPointerDown={(e) => {
+        e.preventDefault();
+        setDragging(true);
+        const el = e.currentTarget;
+        el.setPointerCapture(e.pointerId);
+        const move = (ev: PointerEvent) => onMove(ev.clientX, ev.clientY);
+        const up = (ev: PointerEvent) => {
+          el.releasePointerCapture(ev.pointerId);
+          el.removeEventListener("pointermove", move);
+          el.removeEventListener("pointerup", up);
+          setDragging(false);
+        };
+        el.addEventListener("pointermove", move);
+        el.addEventListener("pointerup", up);
+      }}
+    />
+  );
+}
 
 export default function AttemptPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: attemptId } = use(params);
@@ -38,6 +97,41 @@ export default function AttemptPage({ params }: { params: Promise<{ id: string }
   const [confirmFinish, setConfirmFinish] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<ExecutionSummary[] | null>(null);
   const [error, setError] = useState("");
+  const [layout, setLayout] = useState<Layout>(DEFAULT_LAYOUT);
+  const mainRef = useRef<HTMLDivElement>(null);
+  const editorColRef = useRef<HTMLDivElement>(null);
+
+  // 레이아웃 복원/저장 (localStorage)
+  useEffect(() => {
+    try {
+      setLayout(sanitizeLayout(JSON.parse(localStorage.getItem(LAYOUT_KEY) || "{}")));
+    } catch {
+      /* 기본값 유지 */
+    }
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout));
+    } catch {
+      /* 저장 실패 무시 */
+    }
+  }, [layout]);
+
+  const onStatementResize = useCallback((clientX: number) => {
+    const r = mainRef.current?.getBoundingClientRect();
+    if (!r) return;
+    setLayout((l) => ({ ...l, leftPct: clamp(((clientX - r.left) / r.width) * 100, 18, 60) }));
+  }, []);
+  const onChatResize = useCallback((clientX: number) => {
+    const r = mainRef.current?.getBoundingClientRect();
+    if (!r) return;
+    setLayout((l) => ({ ...l, chatW: clamp(r.right - clientX, 280, 720) }));
+  }, []);
+  const onConsoleResize = useCallback((_x: number, clientY: number) => {
+    const r = editorColRef.current?.getBoundingClientRect();
+    if (!r) return;
+    setLayout((l) => ({ ...l, consoleH: clamp(r.bottom - clientY, 96, r.height - 160) }));
+  }, []);
 
   const codeStateRef = useRef(codeState);
   codeStateRef.current = codeState;
@@ -333,10 +427,10 @@ export default function AttemptPage({ params }: { params: Promise<{ id: string }
         </div>
       </header>
 
-      {/* 본문 3열: 지문 | 에디터+콘솔 | (AI 채팅) */}
-      <div className="flex min-h-0 flex-1">
+      {/* 본문 3열: 지문 | 에디터+콘솔 | (AI 채팅) — 구분선 드래그로 크기 조절 */}
+      <div ref={mainRef} className="flex min-h-0 flex-1">
         {/* 지문 */}
-        <div className="flex w-[38%] min-w-0 flex-col border-r border-slate-700">
+        <div className="flex min-w-0 flex-col" style={{ width: `${layout.leftPct}%` }}>
           <div className="flex shrink-0 gap-1 border-b border-slate-700 px-2 pt-2">
             {attempt.problems.map((p, i) => (
               <button
@@ -381,8 +475,10 @@ export default function AttemptPage({ params }: { params: Promise<{ id: string }
           </div>
         </div>
 
+        <Divider orientation="vertical" onMove={onStatementResize} />
+
         {/* 에디터 + 콘솔 */}
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div ref={editorColRef} className="flex min-w-0 flex-1 flex-col">
           <div className="flex h-11 shrink-0 items-center justify-between border-b border-slate-700 px-3">
             <select
               className="rounded-lg border border-slate-600 bg-slate-800 px-2 py-1 text-sm"
@@ -439,7 +535,11 @@ export default function AttemptPage({ params }: { params: Promise<{ id: string }
               }
             />
           </div>
-          <div className="flex h-56 shrink-0 flex-col border-t border-slate-700 bg-slate-900">
+          <Divider orientation="horizontal" onMove={onConsoleResize} />
+          <div
+            className="flex shrink-0 flex-col bg-slate-900"
+            style={{ height: layout.consoleH, maxHeight: "75%" }}
+          >
             <div className="flex h-8 shrink-0 items-center border-b border-slate-800 px-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
               실행 결과
             </div>
@@ -451,9 +551,12 @@ export default function AttemptPage({ params }: { params: Promise<{ id: string }
 
         {/* AI 채팅 */}
         {isAi && showChat && (
-          <div className="w-[26rem] shrink-0 border-l border-slate-700 bg-slate-900">
-            <AiChat attemptId={attemptId} problemId={problem.id} />
-          </div>
+          <>
+            <Divider orientation="vertical" onMove={onChatResize} />
+            <div className="shrink-0 bg-slate-900" style={{ width: layout.chatW }}>
+              <AiChat attemptId={attemptId} problemId={problem.id} />
+            </div>
+          </>
         )}
       </div>
 
