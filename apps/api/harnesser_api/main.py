@@ -25,6 +25,7 @@ from .seed import seed_if_empty
 # create_all은 기존 테이블에 컬럼을 추가하지 않는다 — 스키마 변경은 여기에 idempotent DDL로 누적
 MIGRATIONS = [
     "ALTER TABLE assessments ADD COLUMN IF NOT EXISTS ai_max_turns INTEGER NOT NULL DEFAULT 20",
+    "ALTER TABLE attempt_problem_states ADD COLUMN IF NOT EXISTS code_by_lang JSONB NOT NULL DEFAULT '{}'::jsonb",
 ]
 
 
@@ -49,7 +50,7 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
 
 
-app = FastAPI(title="Harnesser API", version="0.3.0", lifespan=lifespan)
+app = FastAPI(title="Harnesser API", version="0.4.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

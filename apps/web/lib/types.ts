@@ -135,6 +135,20 @@ export interface AttemptProblem {
   samples: { input: string; expected_output: string }[];
   saved_language: string | null;
   saved_code: string | null;
+  saved_code_by_lang: Record<string, string>;
+}
+
+export interface ExecutionSummary {
+  id: string;
+  problem_id: string;
+  kind: "run" | "submit";
+  language: string;
+  status: string;
+  verdict: string | null;
+  score: number | null;
+  passed: number;
+  total: number;
+  created_at: string;
 }
 
 export interface Attempt {

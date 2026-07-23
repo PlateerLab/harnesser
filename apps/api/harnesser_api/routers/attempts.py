@@ -26,6 +26,7 @@ from ..schemas import (
     EventBatchIn,
     MyAssignmentOut,
     SampleCase,
+    StateIn,
 )
 
 router = APIRouter(tags=["attempts"])
@@ -187,9 +188,33 @@ async def post_events(
     for ev in events:
         db.add(Event(attempt_id=attempt.id, problem_id=ev.problem_id, type=ev.type, payload=ev.payload))
         if ev.type == "code_snapshot" and ev.problem_id:
-            await _upsert_state(attempt.id, ev.problem_id, ev.payload, db)
+            language = str(ev.payload.get("language", "python"))[:20]
+            code = str(ev.payload.get("code", ""))[: settings.max_code_bytes]
+            await _upsert_state(attempt.id, ev.problem_id, language, {language: code}, db)
     await db.commit()
     return {"ok": True, "recorded": len(events)}
+
+
+@router.post("/attempts/{attempt_id}/state")
+async def save_state(
+    attempt_id: uuid.UUID,
+    body: StateIn,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """에디터 상태(언어별 코드 전체) 저장 — 디바운스/이탈 시 호출되는 복원용 저장."""
+    attempt = await get_attempt_for(attempt_id, user, db)
+    if attempt.user_id != user.id:
+        raise HTTPException(403, "본인의 응시에만 저장할 수 있습니다")
+    if attempt.status != "in_progress":
+        return {"ok": True, "saved": False}
+    code_by_lang = {
+        str(lang)[:20]: str(code)[: settings.max_code_bytes]
+        for lang, code in list(body.code_by_lang.items())[:8]
+    }
+    await _upsert_state(attempt.id, body.problem_id, body.language, code_by_lang, db)
+    await db.commit()
+    return {"ok": True, "saved": True}
 
 
 @router.delete("/attempts/{attempt_id}")
@@ -226,9 +251,14 @@ async def finish_attempt(
     return await _attempt_out(attempt, db)
 
 
-async def _upsert_state(attempt_id: uuid.UUID, problem_id: uuid.UUID, payload: dict, db: AsyncSession):
-    code = str(payload.get("code", ""))[: settings.max_code_bytes]
-    language = str(payload.get("language", "python"))[:20]
+async def _upsert_state(
+    attempt_id: uuid.UUID,
+    problem_id: uuid.UUID,
+    language: str,
+    code_by_lang: dict[str, str],
+    db: AsyncSession,
+):
+    code = code_by_lang.get(language, "")
     state = (
         await db.execute(
             select(AttemptProblemState).where(
@@ -240,10 +270,17 @@ async def _upsert_state(attempt_id: uuid.UUID, problem_id: uuid.UUID, payload: d
     if state:
         state.code = code
         state.language = language
+        state.code_by_lang = {**(state.code_by_lang or {}), **code_by_lang}
         state.updated_at = utcnow()
     else:
         db.add(
-            AttemptProblemState(attempt_id=attempt_id, problem_id=problem_id, language=language, code=code)
+            AttemptProblemState(
+                attempt_id=attempt_id,
+                problem_id=problem_id,
+                language=language,
+                code=code,
+                code_by_lang=code_by_lang,
+            )
         )
 
 
@@ -286,6 +323,7 @@ async def _attempt_out(attempt: Attempt, db: AsyncSession) -> AttemptOut:
                 ],
                 saved_language=state.language if state else None,
                 saved_code=state.code if state else None,
+                saved_code_by_lang=(state.code_by_lang or {}) if state else {},
             )
         )
     remaining = max(0, int((attempt.deadline_at - utcnow()).total_seconds())) if attempt.status == "in_progress" else 0

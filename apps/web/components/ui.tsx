@@ -114,13 +114,17 @@ export function Modal({
   children: ReactNode;
   onClose: () => void;
 }) {
+  // text-slate-900을 명시해 다크 페이지(응시 화면 등) 위에서도 색이 깨지지 않게 한다
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
       <div
-        className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl"
+        className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 text-slate-900 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="mb-4 text-lg font-bold">{title}</h3>
+        <h3 className="mb-4 text-lg font-bold text-slate-900">{title}</h3>
         {children}
       </div>
     </div>

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import uuid
 
@@ -131,45 +132,70 @@ async def chat(
 
     problem_id = body.problem_id
     user_msg_id = user_msg.id
+    chat_model = cfg.chat_model
+
+    async def persist(content: str, error: str | None, disconnected: bool = False) -> str | None:
+        """응답 생명주기와 분리된 세션으로 어시스턴트 턴을 영속화.
+
+        클라이언트가 새로고침/이탈로 끊겨도 받은 만큼은 저장하고,
+        아무 응답도 받지 못한 턴은 meta.failed로 표시해 소진 턴에서 제외한다.
+        """
+        meta: dict = {}
+        if error:
+            meta["error"] = error
+        if disconnected:
+            meta["disconnected"] = True
+        async with SessionLocal() as s:
+            msg = AiMessage(
+                attempt_id=attempt_id,
+                problem_id=problem_id,
+                role="assistant",
+                content=content,
+                model=chat_model,
+                meta=meta,
+            )
+            s.add(msg)
+            s.add(
+                Event(
+                    attempt_id=attempt_id,
+                    problem_id=problem_id,
+                    type="ai_message",
+                    payload={
+                        "role": "assistant",
+                        "chars": len(content),
+                        "error": error,
+                        "disconnected": disconnected,
+                    },
+                )
+            )
+            if not content:
+                failed_user_msg = await s.get(AiMessage, user_msg_id)
+                if failed_user_msg:
+                    failed_user_msg.meta = {**(failed_user_msg.meta or {}), "failed": True}
+            await s.commit()
+            return str(msg.id)
 
     async def event_stream():
         parts: list[str] = []
         error: str | None = None
+        persisted = False
         try:
-            async for delta in provider.stream_chat(cfg, messages):
-                parts.append(delta)
-                yield f"data: {json.dumps({'delta': delta}, ensure_ascii=False)}\n\n"
-        except Exception as e:  # noqa: BLE001 — 오류도 응답으로 전달
-            error = str(e)
-            yield f"data: {json.dumps({'error': error}, ensure_ascii=False)}\n\n"
-        content = "".join(parts)
-        # 스트리밍 완료 후 별도 세션으로 기록 (응답 생명주기와 분리)
-        if content or error:
-            async with SessionLocal() as s:
-                msg = AiMessage(
-                    attempt_id=attempt_id,
-                    problem_id=problem_id,
-                    role="assistant",
-                    content=content,
-                    model=cfg.chat_model,
-                    meta={"error": error} if error else {},
+            try:
+                async for delta in provider.stream_chat(cfg, messages):
+                    parts.append(delta)
+                    yield f"data: {json.dumps({'delta': delta}, ensure_ascii=False)}\n\n"
+            except Exception as e:  # noqa: BLE001 — 오류도 응답으로 전달
+                error = str(e)
+                yield f"data: {json.dumps({'error': error}, ensure_ascii=False)}\n\n"
+            msg_id = await persist("".join(parts), error)
+            persisted = True
+            yield f"data: {json.dumps({'done': True, 'message_id': msg_id})}\n\n"
+        finally:
+            if not persisted:
+                # 클라이언트 이탈로 스트림이 취소된 경우 — 독립 태스크로 저장을 보장
+                asyncio.get_running_loop().create_task(
+                    persist("".join(parts), error, disconnected=True)
                 )
-                s.add(msg)
-                s.add(
-                    Event(
-                        attempt_id=attempt_id,
-                        problem_id=problem_id,
-                        type="ai_message",
-                        payload={"role": "assistant", "chars": len(content), "error": error},
-                    )
-                )
-                if error and not content:
-                    # 응답을 전혀 받지 못한 턴은 소진 턴에서 제외(환불)
-                    failed_user_msg = await s.get(AiMessage, user_msg_id)
-                    if failed_user_msg:
-                        failed_user_msg.meta = {**(failed_user_msg.meta or {}), "failed": True}
-                await s.commit()
-                yield f"data: {json.dumps({'done': True, 'message_id': str(msg.id)})}\n\n"
 
     return StreamingResponse(
         event_stream(),

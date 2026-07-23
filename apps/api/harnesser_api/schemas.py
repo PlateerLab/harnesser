@@ -186,6 +186,7 @@ class AttemptProblemOut(BaseModel):
     samples: list[SampleCase]
     saved_language: str | None = None
     saved_code: str | None = None
+    saved_code_by_lang: dict[str, str] = {}
 
 
 class AttemptOut(BaseModel):
@@ -198,6 +199,27 @@ class AttemptOut(BaseModel):
     deadline_at: datetime
     remaining_seconds: int
     problems: list[AttemptProblemOut] = []
+
+
+class StateIn(BaseModel):
+    """에디터 상태 저장 (새로고침/이탈 복원용). sendBeacon 호환을 위해 POST."""
+
+    problem_id: uuid.UUID
+    language: str = Field(max_length=20)
+    code_by_lang: dict[str, str] = {}
+
+
+class ExecutionSummary(BaseModel):
+    id: uuid.UUID
+    problem_id: uuid.UUID
+    kind: str
+    language: str
+    status: str
+    verdict: str | None
+    score: float | None
+    passed: int = 0
+    total: int = 0
+    created_at: datetime
 
 
 class EventIn(BaseModel):

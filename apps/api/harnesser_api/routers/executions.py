@@ -9,7 +9,7 @@ from ..db import get_db
 from ..deps import get_current_user
 from ..judge.queue import enqueue_execution
 from ..models import AssessmentProblem, Event, Execution, Problem, TestCase, User
-from ..schemas import LANGUAGES, ExecutionIn, ExecutionOut, TestResultOut
+from ..schemas import LANGUAGES, ExecutionIn, ExecutionOut, ExecutionSummary, TestResultOut
 from .attempts import get_attempt_for
 
 router = APIRouter(tags=["executions"])
@@ -93,6 +93,37 @@ async def create_execution(
         tests=[{"id": str(t.id), "input": t.input, "expected": t.expected_output} for t in tests],
     )
     return await _execution_out(execution, user, db)
+
+
+@router.get("/attempts/{attempt_id}/executions", response_model=list[ExecutionSummary])
+async def list_executions(
+    attempt_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
+    """시도의 실행 이력 요약 (새로고침 후 콘솔/제출 현황 복원용)."""
+    await get_attempt_for(attempt_id, user, db)
+    rows = (
+        await db.execute(
+            select(Execution).where(Execution.attempt_id == attempt_id).order_by(Execution.created_at)
+        )
+    ).scalars().all()
+    out = []
+    for e in rows:
+        results = e.results or []
+        out.append(
+            ExecutionSummary(
+                id=e.id,
+                problem_id=e.problem_id,
+                kind=e.kind,
+                language=e.language,
+                status=e.status,
+                verdict=e.verdict,
+                score=e.score,
+                passed=sum(1 for r in results if r.get("verdict") == "AC"),
+                total=len(results),
+                created_at=e.created_at,
+            )
+        )
+    return out
 
 
 @router.get("/executions/{execution_id}", response_model=ExecutionOut)

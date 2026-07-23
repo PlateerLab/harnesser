@@ -145,6 +145,7 @@ class AttemptProblemState(Base):
     problem_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("problems.id", ondelete="CASCADE"))
     language: Mapped[str] = mapped_column(String(20), default="python")
     code: Mapped[str] = mapped_column(Text, default="")
+    code_by_lang: Mapped[dict] = mapped_column(JSONB, default=dict)  # 언어 전환 시에도 작성분 보존
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
