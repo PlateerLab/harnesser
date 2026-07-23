@@ -13,3 +13,8 @@ python3 mock_llm.py &           # :18001에 OpenAI 호환 모의 서버
 # 게이트웨이 IP 확인: docker network inspect harnesser_default -f '{{(index .IPAM.Config 0).Gateway}}'
 python3 test_ai_providers.py "http://<gateway>:18001/v1"   # (24)
 ```
+
+```bash
+# AI 채팅 WebSocket E2E — api 컨테이너 내부에서 실행 (websockets 의존성 내장):
+docker cp test_ai_ws.py harnesser-api-1:/tmp/ && docker exec harnesser-api-1 python3 /tmp/test_ai_ws.py "http://<gateway>:18001/v1"   # (18)
+```

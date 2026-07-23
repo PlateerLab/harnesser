@@ -40,12 +40,18 @@ class Handler(BaseHTTPRequestHandler):
         model = req.get("model", MODEL)
         now = int(time.time())
 
+        # "slow" 모델은 단어당 지연을 넣어 리플레이/취소 테스트를 가능하게 한다
+        slow = "slow" in model
+        reply = ("느린 " * 30 + "응답 끝").strip() if slow else REPLY
+
         if req.get("stream"):
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             self.end_headers()
-            words = REPLY.split(" ")
+            words = reply.split(" ")
             for i, w in enumerate(words):
+                if slow:
+                    time.sleep(0.15)
                 chunk = {
                     "id": "chatcmpl-mock", "object": "chat.completion.chunk", "created": now,
                     "model": model,

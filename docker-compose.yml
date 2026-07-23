@@ -66,9 +66,19 @@ services:
     restart: unless-stopped
     environment:
       API_URL: http://api:8000
-    ports:
-      - "${WEB_PORT:-3000}:3000"
     depends_on:
+      api:
+        condition: service_started
+
+  # 단일 오리진 엣지 — /api(WebSocket·SSE 포함)를 FastAPI로, 나머지는 Next.js로
+  edge:
+    build: ./apps/edge
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-3000}:80"
+    depends_on:
+      web:
+        condition: service_started
       api:
         condition: service_started
 

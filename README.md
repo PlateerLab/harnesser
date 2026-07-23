@@ -43,20 +43,26 @@ docker compose up -d --build
 ## 아키텍처
 
 ```
-┌──────────┐   /api rewrite   ┌──────────┐   LPUSH    ┌───────────┐
-│   web    │ ───────────────► │   api    │ ─────────► │   judge   │
-│ Next.js  │                  │ FastAPI  │   Redis    │ worker    │
-└──────────┘                  └────┬─────┘ ◄───────── │ (sandbox) │
-                                   │      콜백(HTTP)   └───────────┘
-                              PostgreSQL
+            ┌──────────┐
+ :3000 ───► │   edge   │ ── /api (WS·SSE 포함) ──► ┌──────────┐   LPUSH    ┌───────────┐
+            │  nginx   │ ── /                 ──► │   api    │ ─────────► │   judge   │
+            └──────────┘      ┌──────────┐        │ FastAPI  │   Redis    │ worker    │
+                              │   web    │        └────┬─────┘ ◄───────── │ (sandbox) │
+                              │ Next.js  │             │      콜백(HTTP)   └───────────┘
+                              └──────────┘        PostgreSQL
 ```
 
 | 서비스 | 스택 | 역할 |
 |---|---|---|
+| `edge` | nginx | 단일 오리진 — `/api`(WebSocket·SSE 무버퍼)와 웹 라우팅 |
 | `web` | Next.js 15, Tailwind v4, Monaco | 응시/관리자/리뷰 UI |
-| `api` | FastAPI, SQLAlchemy(async), PostgreSQL | 인증(JWT 쿠키), CRUD, 이벤트 기록, AI SSE 프록시, 자동평가 |
+| `api` | FastAPI, SQLAlchemy(async), geny-executor llm_client | 인증(JWT 쿠키), CRUD, 이벤트 기록, AI 채팅 WS(+SSE 폴백), 자동평가 |
 | `judge` | Python + gcc/openjdk-21/go 툴체인 | Redis 큐 소비, rlimit 샌드박스 채점, 결과 콜백 |
 | `postgres` / `redis` | 16-alpine / 7-alpine | 저장소 / 채점 큐 |
+
+AI 채팅은 WebSocket(`/attempts/{id}/ai/ws`, 동형 봉투 + seq)으로 스트리밍됩니다. 생성은 소켓과
+분리된 서버 태스크로 실행되어 새로고침/재접속 시 진행 중 응답을 리플레이하며, WS 불가 환경은
+SSE로 자동 폴백합니다.
 
 ## 설정
 

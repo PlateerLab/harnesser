@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..ai import provider
+from ..ai.chat_service import SYSTEM_PROMPT, used_turns
 from ..config import settings
 from ..db import SessionLocal, get_db
 from ..deps import get_current_user
@@ -16,11 +17,6 @@ from ..schemas import AiChatIn, AiMessageOut
 from .attempts import get_attempt_for
 
 router = APIRouter(tags=["ai"])
-
-SYSTEM_PROMPT = """당신은 코딩 테스트 응시자를 돕는 AI 어시스턴트입니다.
-응시자가 문제를 이해하고, 접근 방법을 설계하고, 코드를 작성하는 것을 자유롭게 도와주세요.
-코드 예시는 markdown 코드 블록으로 제공하세요.
-모든 대화는 평가 목적으로 기록됩니다."""
 
 
 @router.get("/ai/status")
@@ -32,16 +28,7 @@ async def ai_status(_: User = Depends(get_current_user), db: AsyncSession = Depe
 
 
 async def _used_turns(attempt_id: uuid.UUID, db: AsyncSession) -> int:
-    """소진한 질문 턴 수 — 공급자 오류로 응답을 전혀 못 받은 턴(meta.failed)은 제외."""
-    return (
-        await db.execute(
-            select(func.count(AiMessage.id)).where(
-                AiMessage.attempt_id == attempt_id,
-                AiMessage.role == "user",
-                ~AiMessage.meta.contains({"failed": True}),
-            )
-        )
-    ).scalar() or 0
+    return await used_turns(db, attempt_id)
 
 
 @router.get("/attempts/{attempt_id}/ai/usage")

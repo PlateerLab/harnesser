@@ -9,6 +9,7 @@ from .config import settings
 from .db import Base, SessionLocal, engine
 from .routers import (
     ai,
+    ai_ws,
     assessments,
     attempts,
     auth,
@@ -53,7 +54,7 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
 
 
-app = FastAPI(title="Harnesser API", version="0.5.0", lifespan=lifespan)
+app = FastAPI(title="Harnesser API", version="0.6.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -70,6 +71,7 @@ app.include_router(assessments.router)
 app.include_router(attempts.router)
 app.include_router(executions.router)
 app.include_router(ai.router)
+app.include_router(ai_ws.router)
 app.include_router(review.router)
 app.include_router(settings_router.router)
 app.include_router(internal.router)
