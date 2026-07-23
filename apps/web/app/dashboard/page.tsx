@@ -70,7 +70,7 @@ export default function DashboardPage() {
               href={user.role === "admin" ? "/admin/problems" : "/review"}
               className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
             >
-              ⚙️ 관리자 콘솔
+              관리자 콘솔
             </Link>
           )}
           <Button variant="ghost" onClick={() => logout(router)}>
@@ -133,7 +133,7 @@ export default function DashboardPage() {
                             결과 리뷰
                           </Link>
                           <Button variant="secondary" onClick={() => retake(a)} disabled={busy}>
-                            {busy ? "초기화 중..." : "🔄 다시 응시"}
+                            {busy ? "초기화 중..." : "다시 응시"}
                           </Button>
                         </>
                       ) : (

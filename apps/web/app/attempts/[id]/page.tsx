@@ -285,7 +285,7 @@ export default function AttemptPage({ params }: { params: Promise<{ id: string }
                 disabled={busy}
                 className="rounded-lg border border-slate-600 px-4 py-1 text-sm hover:bg-slate-800 disabled:opacity-40"
               >
-                ▶ 실행
+                실행
               </button>
               <button
                 onClick={() => execute("submit")}
@@ -314,8 +314,13 @@ export default function AttemptPage({ params }: { params: Promise<{ id: string }
               }
             />
           </div>
-          <div className="dark-scroll h-56 shrink-0 overflow-y-auto border-t border-slate-700 bg-slate-900">
-            <ExecutionResults execution={executions[problem.id] ?? null} />
+          <div className="flex h-56 shrink-0 flex-col border-t border-slate-700 bg-slate-900">
+            <div className="flex h-8 shrink-0 items-center border-b border-slate-800 px-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
+              실행 결과
+            </div>
+            <div className="dark-scroll min-h-0 flex-1 overflow-y-auto">
+              <ExecutionResults execution={executions[problem.id] ?? null} />
+            </div>
           </div>
         </div>
 

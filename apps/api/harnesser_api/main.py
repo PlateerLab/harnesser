@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from .config import settings
 from .db import Base, SessionLocal, engine
@@ -21,6 +22,12 @@ from .routers import (
 from .seed import seed_if_empty
 
 
+# create_all은 기존 테이블에 컬럼을 추가하지 않는다 — 스키마 변경은 여기에 idempotent DDL로 누적
+MIGRATIONS = [
+    "ALTER TABLE assessments ADD COLUMN IF NOT EXISTS ai_max_turns INTEGER NOT NULL DEFAULT 20",
+]
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # DB가 뜰 때까지 재시도 (compose 기동 레이스 대비)
@@ -28,6 +35,8 @@ async def lifespan(app: FastAPI):
         try:
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
+                for stmt in MIGRATIONS:
+                    await conn.execute(text(stmt))
             break
         except Exception:
             if i == 29:

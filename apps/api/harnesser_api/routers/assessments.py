@@ -45,6 +45,7 @@ async def _to_out(a: Assessment, db: AsyncSession) -> AssessmentOut:
         description=a.description,
         mode=a.mode,
         duration_min=a.duration_min,
+        ai_max_turns=a.ai_max_turns,
         starts_at=a.starts_at,
         ends_at=a.ends_at,
         created_at=a.created_at,
@@ -93,9 +94,14 @@ async def create_assessment(body: AssessmentIn, db: AsyncSession = Depends(get_d
         description=body.description,
         mode=body.mode,
         duration_min=body.duration_min,
+        ai_max_turns=body.ai_max_turns,
         starts_at=body.starts_at,
         ends_at=body.ends_at,
         created_by=user.id,
+        # 컬렉션을 미리 초기화 — db.get()의 autoflush로 INSERT된 뒤
+        # 미로드 컬렉션에 접근하면 async 세션에서 lazy-load(MissingGreenlet)가 터진다
+        problems=[],
+        assignments=[],
     )
     db.add(a)
     await _apply_relations(a, body, db)
@@ -117,6 +123,7 @@ async def update_assessment(
     a.description = body.description
     a.mode = body.mode
     a.duration_min = body.duration_min
+    a.ai_max_turns = body.ai_max_turns
     a.starts_at = body.starts_at
     a.ends_at = body.ends_at
     a.problems.clear()

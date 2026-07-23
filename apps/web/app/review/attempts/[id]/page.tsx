@@ -101,7 +101,7 @@ export default function ReviewAttemptPage({ params }: { params: Promise<{ id: st
           </div>
         </div>
         <Button onClick={runAutoEval} disabled={autoEvalBusy}>
-          {autoEvalBusy ? "AI 평가 중..." : autoEval ? "AI 자동평가 다시 실행" : "🤖 AI 자동평가 실행"}
+          {autoEvalBusy ? "AI 평가 중..." : autoEval ? "AI 자동평가 다시 실행" : "AI 자동평가 실행"}
         </Button>
       </div>
 
@@ -177,7 +177,7 @@ export default function ReviewAttemptPage({ params }: { params: Promise<{ id: st
           {detail.ai_messages.map((m) => (
             <div key={m.id} className={m.role === "user" ? "ml-12" : "mr-6"}>
               <div className="mb-1 flex items-center gap-2 text-xs text-slate-400">
-                <span className="font-semibold">{m.role === "user" ? "👤 응시자" : "🤖 AI"}</span>
+                <span className="font-semibold">{m.role === "user" ? "응시자" : "AI"}</span>
                 <span>{fmtOffset(detail.attempt.started_at, m.created_at)}</span>
                 {m.problem_id && (
                   <span className="rounded bg-slate-100 px-1.5">{problemTitles[m.problem_id]}</span>
@@ -243,7 +243,7 @@ function OverviewTab({
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
       <div className="space-y-4">
-        <h2 className="font-bold">🤖 AI 자동평가</h2>
+        <h2 className="font-bold">AI 자동평가</h2>
         {autoEvals.length === 0 && (
           <Card className="p-6 text-center text-sm text-slate-400">
             아직 자동평가가 없습니다. 우측 상단 버튼으로 실행하세요.
@@ -308,7 +308,7 @@ function OverviewTab({
               )}
               {!!s.integrity_flags?.length && (
                 <div className="rounded-lg bg-red-50 p-3 text-sm">
-                  <span className="font-semibold text-red-600">⚠️ 무결성 플래그</span>
+                  <span className="font-semibold text-red-600">무결성 플래그</span>
                   <ul className="ml-4 list-disc text-red-700">
                     {s.integrity_flags.map((x, i) => (
                       <li key={i}>{x}</li>
@@ -322,7 +322,7 @@ function OverviewTab({
       </div>
 
       <div className="space-y-4">
-        <h2 className="font-bold">✍️ 평가자 의견</h2>
+        <h2 className="font-bold">평가자 의견</h2>
         {humanEvals.map((ev) => (
           <Card key={ev.id} className="p-5">
             <div className="mb-2 flex items-center justify-between text-xs text-slate-400">

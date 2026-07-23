@@ -70,6 +70,7 @@ export interface Assessment {
   description: string;
   mode: Mode;
   duration_min: number;
+  ai_max_turns: number;
   starts_at: string | null;
   ends_at: string | null;
   created_at: string;
@@ -90,6 +91,13 @@ export interface AiSettings {
     eval_model: string;
     source: "db" | "env" | "none";
   };
+}
+
+export interface AiUsage {
+  enabled: boolean;
+  used: number;
+  max: number;
+  remaining: number;
 }
 
 export interface AiTestResult {

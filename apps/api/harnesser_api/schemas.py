@@ -107,6 +107,7 @@ class AssessmentIn(BaseModel):
     description: str = ""
     mode: Mode = "standard"
     duration_min: int = Field(default=90, ge=5, le=600)
+    ai_max_turns: int = Field(default=20, ge=0, le=500)  # ai_assisted 모드의 응시당 질문 한도
     starts_at: datetime | None = None
     ends_at: datetime | None = None
     problems: list[AssessmentProblemIn] = []
@@ -135,6 +136,7 @@ class AssessmentOut(BaseModel):
     description: str
     mode: str
     duration_min: int
+    ai_max_turns: int = 20
     starts_at: datetime | None
     ends_at: datetime | None
     created_at: datetime

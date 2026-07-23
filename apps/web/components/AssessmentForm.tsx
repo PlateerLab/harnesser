@@ -12,6 +12,7 @@ interface FormState {
   description: string;
   mode: "standard" | "ai_assisted";
   duration_min: number;
+  ai_max_turns: number;
   starts_at: string | null;
   ends_at: string | null;
   problems: { problem_id: string; points: number }[];
@@ -33,6 +34,7 @@ export function AssessmentForm({ initial, assessmentId }: { initial?: Assessment
           description: initial.description,
           mode: initial.mode,
           duration_min: initial.duration_min,
+          ai_max_turns: initial.ai_max_turns ?? 20,
           starts_at: initial.starts_at,
           ends_at: initial.ends_at,
           problems: initial.problems.map((p) => ({ problem_id: p.problem_id, points: p.points })),
@@ -43,6 +45,7 @@ export function AssessmentForm({ initial, assessmentId }: { initial?: Assessment
           description: "",
           mode: "standard",
           duration_min: 90,
+          ai_max_turns: 20,
           starts_at: null,
           ends_at: null,
           problems: [],
@@ -141,6 +144,21 @@ export function AssessmentForm({ initial, assessmentId }: { initial?: Assessment
             onChange={(e) => set("description", e.target.value)}
           />
         </Field>
+        {form.mode === "ai_assisted" && (
+          <Field
+            label="AI 질문 한도 (회)"
+            hint="응시 1회당 AI에게 질문할 수 있는 최대 횟수입니다. 한도 도달 시 채팅이 차단됩니다."
+          >
+            <input
+              className={`${inputCls} max-w-40`}
+              type="number"
+              min={1}
+              max={500}
+              value={form.ai_max_turns}
+              onChange={(e) => set("ai_max_turns", Number(e.target.value))}
+            />
+          </Field>
+        )}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <Field label="제한시간 (분)">
             <input

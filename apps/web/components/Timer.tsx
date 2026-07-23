@@ -40,7 +40,7 @@ export function Timer({
         urgent ? "bg-red-500/20 text-red-400" : "bg-slate-700/60 text-slate-200"
       }`}
     >
-      ⏱ {fmtDuration(remaining)}
+      {fmtDuration(remaining)}
     </span>
   );
 }

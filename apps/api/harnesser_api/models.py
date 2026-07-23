@@ -77,6 +77,7 @@ class Assessment(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     mode: Mapped[str] = mapped_column(String(20), default="standard")  # standard | ai_assisted
     duration_min: Mapped[int] = mapped_column(Integer, default=90)
+    ai_max_turns: Mapped[int] = mapped_column(Integer, default=20)  # ai_assisted 모드의 응시당 질문 한도
     starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)

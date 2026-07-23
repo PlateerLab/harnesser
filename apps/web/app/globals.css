@@ -25,9 +25,26 @@ body {
 .prose pre {
   @apply bg-slate-900 text-slate-100 rounded-lg;
 }
-.prose code {
-  @apply text-pink-600;
+/* 인라인 코드: 백틱 장식 제거 + 배지 스타일 */
+.prose :where(code)::before,
+.prose :where(code)::after {
+  content: none;
+}
+.prose :where(code):not(:where(pre code)) {
+  @apply rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] font-semibold text-rose-600;
+}
+.prose-invert :where(code):not(:where(pre code)) {
+  @apply bg-slate-700/70 text-amber-300;
 }
 .prose pre code {
+  @apply text-slate-100 bg-transparent p-0 font-normal;
+}
+.prose-invert :where(h2) {
+  @apply mt-7 mb-3 border-b border-slate-700 pb-2 text-base;
+}
+.prose-invert :where(strong) {
   @apply text-slate-100;
+}
+.prose-invert :where(li)::marker {
+  @apply text-slate-500;
 }

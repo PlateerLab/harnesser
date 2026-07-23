@@ -47,15 +47,17 @@ export function Shell({ user, children }: { user: User; children: React.ReactNod
               ))}
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             <Link
               href="/dashboard"
-              className="rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 text-sm font-medium text-violet-700 hover:bg-violet-100"
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:border-violet-400 hover:text-violet-600"
             >
-              🧑‍💻 응시자 화면
+              응시자 화면
             </Link>
-            <span className="text-sm text-slate-600">{user.name}</span>
-            <Badge value={user.role} />
+            <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
+              <span className="text-sm font-medium text-slate-700">{user.name}</span>
+              <Badge value={user.role} />
+            </div>
             <button
               onClick={() => logout(router)}
               className="text-sm text-slate-400 hover:text-slate-600"

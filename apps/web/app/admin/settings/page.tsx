@@ -90,7 +90,7 @@ export default function SettingsPage() {
               : "border-amber-200 bg-amber-50 text-amber-800"
           }`}
         >
-          <span className="text-lg">{eff?.configured ? "🟢" : "🟡"}</span>
+          <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${eff?.configured ? "bg-emerald-500" : "bg-amber-400"}`} />
           {eff?.configured ? (
             <span>
               <b>연결 설정됨</b> — {eff.base_url} · 채팅 <b>{eff.chat_model}</b> · 평가 <b>{eff.eval_model}</b>
@@ -186,7 +186,7 @@ export default function SettingsPage() {
 
         <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
           <Button variant="secondary" onClick={test} disabled={busy !== ""}>
-            {busy === "test" ? "테스트 중..." : "🔌 연결 테스트"}
+            {busy === "test" ? "테스트 중..." : "연결 테스트"}
           </Button>
           <Button onClick={save} disabled={busy !== ""}>
             {busy === "save" ? "저장 중..." : "저장"}

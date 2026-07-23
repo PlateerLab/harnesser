@@ -8,14 +8,96 @@ import { CodeEditor } from "./CodeEditor";
 import { Markdown } from "./Markdown";
 import { Button, Card, Field, inputCls } from "./ui";
 
+const STATEMENT_TEMPLATE = `## 문제
+
+(문제 상황과 요구사항을 설명하세요.)
+
+## 입력
+
+첫째 줄에 …가 주어집니다.
+
+## 출력
+
+첫째 줄에 …를 출력합니다.
+
+## 제한
+
+- 1 ≤ N ≤ 100,000
+- (값의 범위, 시간 복잡도 힌트 등을 명시하세요.)
+
+## 예시 설명
+
+- 예시 1: …
+`;
+
+const STARTER_TEMPLATE: Record<string, string> = {
+  python: `import sys
+input = sys.stdin.readline
+
+
+def solve() -> None:
+    # TODO: 입력을 읽고 풀이를 작성하세요
+    pass
+
+
+if __name__ == "__main__":
+    solve()
+`,
+  cpp: `#include <bits/stdc++.h>
+using namespace std;
+
+int main() {
+    ios::sync_with_stdio(false);
+    cin.tie(nullptr);
+
+    // TODO: 입력을 읽고 풀이를 작성하세요
+
+    return 0;
+}
+`,
+  java: `import java.io.*;
+import java.util.*;
+
+// 클래스 이름은 반드시 Main이어야 합니다.
+public class Main {
+    public static void main(String[] args) throws IOException {
+        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+        // TODO: 입력을 읽고 풀이를 작성하세요
+    }
+}
+`,
+  go: `package main
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+)
+
+var reader = bufio.NewReader(os.Stdin)
+var writer = bufio.NewWriter(os.Stdout)
+
+func main() {
+	defer writer.Flush()
+
+	// TODO: 입력을 읽고 풀이를 작성하세요
+	_ = reader
+	_ = fmt.Sprint
+}
+`,
+};
+
 const EMPTY: Omit<Problem, "id" | "created_at" | "updated_at"> = {
   title: "",
-  statement_md: "## 문제\n\n\n\n## 입력\n\n\n\n## 출력\n\n",
+  statement_md: STATEMENT_TEMPLATE,
   difficulty: "medium",
   time_limit_ms: 2000,
   memory_limit_mb: 256,
-  starter_code: {},
-  test_cases: [],
+  starter_code: { ...STARTER_TEMPLATE },
+  test_cases: [
+    { input: "", expected_output: "", is_sample: true, weight: 1 },
+    { input: "", expected_output: "", is_sample: false, weight: 2 },
+  ],
 };
 
 export function ProblemForm({ initial, problemId }: { initial?: Problem; problemId?: string }) {
