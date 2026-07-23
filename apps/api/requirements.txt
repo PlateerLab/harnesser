@@ -9,3 +9,7 @@ bcrypt>=4.2,<5
 PyJWT>=2.10,<3
 redis>=5.2,<6
 httpx>=0.28,<0.29
+# 통합 LLM 클라이언트 계층 (openai/anthropic/google/vllm/ollama/lmstudio/custom)
+# — llm_client 서브패키지만 사용하며 내장 에이전트 툴은 로드하지 않는다
+geny-executor>=2.62.0,<3
+openai>=1.50.0

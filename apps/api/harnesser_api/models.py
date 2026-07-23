@@ -78,6 +78,10 @@ class Assessment(Base):
     mode: Mapped[str] = mapped_column(String(20), default="standard")  # standard | ai_assisted
     duration_min: Mapped[int] = mapped_column(Integer, default=90)
     ai_max_turns: Mapped[int] = mapped_column(Integer, default=20)  # ai_assisted 모드의 응시당 질문 한도
+    # 이 시험 전용 LLM 공급자 (없으면 기본 채팅 공급자 사용)
+    ai_provider_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("ai_providers.id", ondelete="SET NULL"), nullable=True
+    )
     starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
@@ -194,6 +198,30 @@ class AiMessage(Base):
     model: Mapped[str | None] = mapped_column(String(100), nullable=True)
     meta: Mapped[dict] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class AiProvider(Base):
+    """LLM 공급자 프로파일 — geny-executor llm_client 백엔드 하나에 대응.
+
+    provider: openai | anthropic | google | vllm | ollama | lmstudio | custom
+    """
+
+    __tablename__ = "ai_providers"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(100))
+    provider: Mapped[str] = mapped_column(String(30))
+    base_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    api_key: Mapped[str] = mapped_column(Text, default="")
+    model: Mapped[str] = mapped_column(String(200))
+    temperature: Mapped[float] = mapped_column(Float, default=0.2)
+    max_tokens: Mapped[int] = mapped_column(Integer, default=4096)
+    default_headers: Mapped[dict] = mapped_column(JSONB, default=dict)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_chat_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_eval_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
 class AppSetting(Base):

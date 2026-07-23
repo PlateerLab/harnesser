@@ -46,6 +46,7 @@ async def _to_out(a: Assessment, db: AsyncSession) -> AssessmentOut:
         mode=a.mode,
         duration_min=a.duration_min,
         ai_max_turns=a.ai_max_turns,
+        ai_provider_id=a.ai_provider_id,
         starts_at=a.starts_at,
         ends_at=a.ends_at,
         created_at=a.created_at,
@@ -95,6 +96,7 @@ async def create_assessment(body: AssessmentIn, db: AsyncSession = Depends(get_d
         mode=body.mode,
         duration_min=body.duration_min,
         ai_max_turns=body.ai_max_turns,
+        ai_provider_id=body.ai_provider_id,
         starts_at=body.starts_at,
         ends_at=body.ends_at,
         created_by=user.id,
@@ -124,6 +126,7 @@ async def update_assessment(
     a.mode = body.mode
     a.duration_min = body.duration_min
     a.ai_max_turns = body.ai_max_turns
+    a.ai_provider_id = body.ai_provider_id
     a.starts_at = body.starts_at
     a.ends_at = body.ends_at
     a.problems.clear()

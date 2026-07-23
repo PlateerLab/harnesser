@@ -16,16 +16,17 @@ export function AiChat({ attemptId, problemId }: { attemptId: string; problemId:
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const [configured, setConfigured] = useState<boolean | null>(null);
   const [usage, setUsage] = useState<AiUsage | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // usage가 시험별 공급자 오버라이드까지 반영한 configured/model을 함께 내려준다
+  const configured = usage === null ? null : usage.configured !== false;
 
   const refreshUsage = useCallback(() => {
     api.get<AiUsage>(`/attempts/${attemptId}/ai/usage`).then(setUsage).catch(() => {});
   }, [attemptId]);
 
   useEffect(() => {
-    api.get<{ configured: boolean }>("/ai/status").then((s) => setConfigured(s.configured));
     refreshUsage();
   }, [refreshUsage]);
 
@@ -88,7 +89,10 @@ export function AiChat({ attemptId, problemId }: { attemptId: string; problemId:
     <div className="flex h-full flex-col">
       {/* 패널 헤더: 남은 질문 한도 */}
       <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-slate-700 px-4">
-        <span className="min-w-0 truncate text-sm font-semibold text-slate-200">AI 어시스턴트</span>
+        <span className="min-w-0 truncate text-sm font-semibold text-slate-200">
+          AI 어시스턴트
+          {usage?.model && <span className="ml-2 font-normal text-slate-500">{usage.model}</span>}
+        </span>
         {usage?.enabled && (
           <span
             className={`shrink-0 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${

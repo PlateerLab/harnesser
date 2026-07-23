@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
-import type { Assessment, ProblemSummary, User } from "@/lib/types";
+import type { AiProviderRow, Assessment, ProblemSummary, User } from "@/lib/types";
 import { DIFFICULTY_LABEL } from "@/lib/format";
 import { Badge, Button, Card, Field, inputCls } from "./ui";
 
@@ -13,6 +13,7 @@ interface FormState {
   mode: "standard" | "ai_assisted";
   duration_min: number;
   ai_max_turns: number;
+  ai_provider_id: string | null;
   starts_at: string | null;
   ends_at: string | null;
   problems: { problem_id: string; points: number }[];
@@ -35,6 +36,7 @@ export function AssessmentForm({ initial, assessmentId }: { initial?: Assessment
           mode: initial.mode,
           duration_min: initial.duration_min,
           ai_max_turns: initial.ai_max_turns ?? 20,
+          ai_provider_id: initial.ai_provider_id ?? null,
           starts_at: initial.starts_at,
           ends_at: initial.ends_at,
           problems: initial.problems.map((p) => ({ problem_id: p.problem_id, points: p.points })),
@@ -46,6 +48,7 @@ export function AssessmentForm({ initial, assessmentId }: { initial?: Assessment
           mode: "standard",
           duration_min: 90,
           ai_max_turns: 20,
+          ai_provider_id: null,
           starts_at: null,
           ends_at: null,
           problems: [],
@@ -54,12 +57,14 @@ export function AssessmentForm({ initial, assessmentId }: { initial?: Assessment
   );
   const [allProblems, setAllProblems] = useState<ProblemSummary[]>([]);
   const [candidates, setCandidates] = useState<User[]>([]);
+  const [providers, setProviders] = useState<AiProviderRow[]>([]);
   const [busy, setBusy] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
     api.get<ProblemSummary[]>("/problems").then(setAllProblems);
     api.get<User[]>("/admin/users?role=candidate").then(setCandidates);
+    api.get<AiProviderRow[]>("/admin/settings/ai/providers").then(setProviders).catch(() => {});
   }, []);
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
@@ -145,19 +150,40 @@ export function AssessmentForm({ initial, assessmentId }: { initial?: Assessment
           />
         </Field>
         {form.mode === "ai_assisted" && (
-          <Field
-            label="AI 질문 한도 (회)"
-            hint="응시 1회당 AI에게 질문할 수 있는 최대 횟수입니다. 한도 도달 시 채팅이 차단됩니다."
-          >
-            <input
-              className={`${inputCls} max-w-40`}
-              type="number"
-              min={1}
-              max={500}
-              value={form.ai_max_turns}
-              onChange={(e) => set("ai_max_turns", Number(e.target.value))}
-            />
-          </Field>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Field
+              label="AI 질문 한도 (회)"
+              hint="응시 1회당 AI에게 질문할 수 있는 최대 횟수입니다. 한도 도달 시 채팅이 차단됩니다."
+            >
+              <input
+                className={`${inputCls} max-w-40`}
+                type="number"
+                min={1}
+                max={500}
+                value={form.ai_max_turns}
+                onChange={(e) => set("ai_max_turns", Number(e.target.value))}
+              />
+            </Field>
+            <Field
+              label="LLM 공급자"
+              hint="이 시험에서 사용할 모델입니다. 미지정 시 설정의 기본 채팅 공급자를 사용합니다."
+            >
+              <select
+                className={inputCls}
+                value={form.ai_provider_id ?? ""}
+                onChange={(e) => set("ai_provider_id", e.target.value || null)}
+              >
+                <option value="">기본 공급자 사용</option>
+                {providers
+                  .filter((p) => p.enabled)
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} — {p.model}
+                    </option>
+                  ))}
+              </select>
+            </Field>
+          </div>
         )}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <Field label="제한시간 (분)">

@@ -26,6 +26,7 @@ from .seed import seed_if_empty
 MIGRATIONS = [
     "ALTER TABLE assessments ADD COLUMN IF NOT EXISTS ai_max_turns INTEGER NOT NULL DEFAULT 20",
     "ALTER TABLE attempt_problem_states ADD COLUMN IF NOT EXISTS code_by_lang JSONB NOT NULL DEFAULT '{}'::jsonb",
+    "ALTER TABLE assessments ADD COLUMN IF NOT EXISTS ai_provider_id UUID REFERENCES ai_providers(id) ON DELETE SET NULL",
 ]
 
 
@@ -46,11 +47,13 @@ async def lifespan(app: FastAPI):
     if settings.seed_demo_data:
         async with SessionLocal() as db:
             await seed_if_empty(db)
+    async with SessionLocal() as db:
+        await settings_router.migrate_legacy_ai_settings(db)
     yield
     await engine.dispose()
 
 
-app = FastAPI(title="Harnesser API", version="0.4.0", lifespan=lifespan)
+app = FastAPI(title="Harnesser API", version="0.5.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

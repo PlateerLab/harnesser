@@ -71,6 +71,7 @@ export interface Assessment {
   mode: Mode;
   duration_min: number;
   ai_max_turns: number;
+  ai_provider_id: string | null;
   starts_at: string | null;
   ends_at: string | null;
   created_at: string;
@@ -78,19 +79,51 @@ export interface Assessment {
   assignments: AssignmentRef[];
 }
 
-export interface AiSettings {
-  base_url: string;
-  chat_model: string;
-  eval_model: string;
+export interface AiProviderMeta {
+  provider: string;
+  label: string;
+  kind: "cloud" | "local";
+  needs_key: boolean;
+  needs_base_url: boolean;
+  default_base_url: string | null;
+  placeholder_model: string;
+  description: string;
+}
+
+export interface AiEffective {
+  configured: boolean;
+  provider: string;
+  model: string;
+  name: string;
+  source: "db" | "env";
+}
+
+export interface AiSettingsMeta {
+  catalog: AiProviderMeta[];
+  effective_chat: AiEffective | null;
+  effective_eval: AiEffective | null;
+  env_fallback_available: boolean;
+}
+
+export interface AiProviderRow {
+  id: string;
+  name: string;
+  provider: string;
+  base_url: string | null;
+  model: string;
+  temperature: number;
+  max_tokens: number;
+  enabled: boolean;
+  is_chat_default: boolean;
+  is_eval_default: boolean;
   has_key: boolean;
   key_hint: string | null;
-  effective: {
-    configured: boolean;
-    base_url: string;
-    chat_model: string;
-    eval_model: string;
-    source: "db" | "env" | "none";
-  };
+  created_at: string;
+}
+
+export interface AiModelInfo {
+  id: string;
+  display_name: string | null;
 }
 
 export interface AiUsage {
@@ -98,6 +131,9 @@ export interface AiUsage {
   used: number;
   max: number;
   remaining: number;
+  configured?: boolean;
+  model?: string | null;
+  provider?: string | null;
 }
 
 export interface AiTestResult {

@@ -108,6 +108,7 @@ class AssessmentIn(BaseModel):
     mode: Mode = "standard"
     duration_min: int = Field(default=90, ge=5, le=600)
     ai_max_turns: int = Field(default=20, ge=0, le=500)  # ai_assisted 모드의 응시당 질문 한도
+    ai_provider_id: uuid.UUID | None = None  # 시험 전용 LLM 공급자 (없으면 기본)
     starts_at: datetime | None = None
     ends_at: datetime | None = None
     problems: list[AssessmentProblemIn] = []
@@ -137,6 +138,7 @@ class AssessmentOut(BaseModel):
     mode: str
     duration_min: int
     ai_max_turns: int = 20
+    ai_provider_id: uuid.UUID | None = None
     starts_at: datetime | None
     ends_at: datetime | None
     created_at: datetime
@@ -161,11 +163,46 @@ class MyAssignmentOut(BaseModel):
     assigned: bool = True  # 스태프 미리보기 목록에서는 미배정 시험도 노출
 
 
-class AiSettingsIn(BaseModel):
-    base_url: str = ""
+class AiProviderIn(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    provider: str = Field(max_length=30)
+    base_url: str | None = Field(default=None, max_length=500)
     api_key: str | None = None  # None=기존 유지, ""=삭제
-    chat_model: str = ""
-    eval_model: str = ""
+    model: str = Field(min_length=1, max_length=200)
+    temperature: float = Field(default=0.2, ge=0.0, le=2.0)
+    max_tokens: int = Field(default=4096, ge=256, le=128000)
+    enabled: bool = True
+
+
+class AiProviderOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    provider: str
+    base_url: str | None
+    model: str
+    temperature: float
+    max_tokens: int
+    enabled: bool
+    is_chat_default: bool
+    is_eval_default: bool
+    has_key: bool = False
+    key_hint: str | None = None
+    created_at: datetime
+
+
+class AiDefaultsIn(BaseModel):
+    chat_provider_id: uuid.UUID | None = None
+    eval_provider_id: uuid.UUID | None = None
+
+
+class AiTestIn(BaseModel):
+    """연결 테스트 — provider_id가 있으면 저장된 키/설정 위에 덮어쓴 값으로 테스트."""
+
+    provider_id: uuid.UUID | None = None
+    provider: str | None = None
+    base_url: str | None = None
+    api_key: str | None = None
+    model: str | None = None
 
 
 class SampleCase(BaseModel):
