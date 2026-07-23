@@ -401,18 +401,18 @@ export default function AttemptPage({ params }: { params: Promise<{ id: string }
     <div className="flex h-screen flex-col bg-slate-900 text-slate-100">
       {/* 헤더 */}
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-700 px-4">
-        <div className="flex items-center gap-3">
-          <span className="font-black">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="shrink-0 whitespace-nowrap font-black">
             Harnesser<span className="text-violet-400">.</span>
           </span>
-          <span className="max-w-md truncate text-sm text-slate-300">{attempt.assessment_title}</span>
+          <span className="min-w-0 truncate text-sm text-slate-300">{attempt.assessment_title}</span>
           {isAi && <Badge value="ai_assisted" label="AI 활용" />}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-3">
           {isAi && (
             <button
               onClick={() => setShowChat((v) => !v)}
-              className="rounded-lg border border-slate-600 px-3 py-1 text-sm text-slate-300 hover:bg-slate-800"
+              className="whitespace-nowrap rounded-lg border border-slate-600 px-3 py-1 text-sm text-slate-300 hover:bg-slate-800"
             >
               {showChat ? "AI 패널 닫기" : "AI 패널 열기"}
             </button>
@@ -420,7 +420,7 @@ export default function AttemptPage({ params }: { params: Promise<{ id: string }
           <Timer initialSeconds={attempt.remaining_seconds} onExpire={finish} />
           <button
             onClick={openFinishModal}
-            className="rounded-lg bg-red-600 px-4 py-1.5 text-sm font-semibold hover:bg-red-500"
+            className="whitespace-nowrap rounded-lg bg-red-600 px-4 py-1.5 text-sm font-semibold hover:bg-red-500"
           >
             시험 종료
           </button>
@@ -430,8 +430,8 @@ export default function AttemptPage({ params }: { params: Promise<{ id: string }
       {/* 본문 3열: 지문 | 에디터+콘솔 | (AI 채팅) — 구분선 드래그로 크기 조절 */}
       <div ref={mainRef} className="flex min-h-0 flex-1">
         {/* 지문 */}
-        <div className="flex min-w-0 flex-col" style={{ width: `${layout.leftPct}%` }}>
-          <div className="flex shrink-0 gap-1 border-b border-slate-700 px-2 pt-2">
+        <div className="flex min-w-[240px] flex-col" style={{ width: `${layout.leftPct}%` }}>
+          <div className="dark-scroll flex shrink-0 gap-1 overflow-x-auto border-b border-slate-700 px-2 pt-2">
             {attempt.problems.map((p, i) => (
               <button
                 key={p.id}
@@ -439,7 +439,8 @@ export default function AttemptPage({ params }: { params: Promise<{ id: string }
                   saveState(problem.id); // 탭 전환 전 현재 문제 저장
                   setActiveIdx(i);
                 }}
-                className={`rounded-t-lg px-4 py-2 text-sm font-medium ${
+                title={`${i + 1}. ${p.title}`}
+                className={`max-w-48 shrink-0 truncate rounded-t-lg px-4 py-2 text-sm font-medium ${
                   i === activeIdx ? "bg-slate-800 text-white" : "text-slate-400 hover:text-slate-200"
                 }`}
               >
@@ -448,9 +449,12 @@ export default function AttemptPage({ params }: { params: Promise<{ id: string }
             ))}
           </div>
           <div className="dark-scroll min-h-0 flex-1 overflow-y-auto bg-slate-800 p-5">
-            <div className="mb-3 flex items-center gap-2">
+            <div className="mb-3 flex min-w-0 items-center gap-2">
               <Badge value={problem.difficulty} label={DIFFICULTY_LABEL[problem.difficulty]} />
-              <span className="text-xs text-slate-400">
+              <span
+                className="min-w-0 truncate text-xs text-slate-400"
+                title={`배점 ${problem.points} · 시간 ${problem.time_limit_ms}ms · 메모리 ${problem.memory_limit_mb}MB`}
+              >
                 배점 {problem.points} · 시간 {problem.time_limit_ms}ms · 메모리 {problem.memory_limit_mb}MB
               </span>
             </div>
@@ -478,10 +482,10 @@ export default function AttemptPage({ params }: { params: Promise<{ id: string }
         <Divider orientation="vertical" onMove={onStatementResize} />
 
         {/* 에디터 + 콘솔 */}
-        <div ref={editorColRef} className="flex min-w-0 flex-1 flex-col">
-          <div className="flex h-11 shrink-0 items-center justify-between border-b border-slate-700 px-3">
+        <div ref={editorColRef} className="flex min-w-[320px] flex-1 flex-col">
+          <div className="flex h-11 shrink-0 items-center justify-between gap-2 overflow-hidden border-b border-slate-700 px-3">
             <select
-              className="rounded-lg border border-slate-600 bg-slate-800 px-2 py-1 text-sm"
+              className="shrink-0 rounded-lg border border-slate-600 bg-slate-800 px-2 py-1 text-sm"
               value={st.language}
               onChange={(e) => {
                 const lang = e.target.value as Language;
@@ -499,18 +503,18 @@ export default function AttemptPage({ params }: { params: Promise<{ id: string }
                 </option>
               ))}
             </select>
-            <div className="flex gap-2">
+            <div className="flex shrink-0 gap-2">
               <button
                 onClick={() => execute("run")}
                 disabled={busy}
-                className="rounded-lg border border-slate-600 px-4 py-1 text-sm hover:bg-slate-800 disabled:opacity-40"
+                className="whitespace-nowrap rounded-lg border border-slate-600 px-4 py-1 text-sm hover:bg-slate-800 disabled:opacity-40"
               >
                 실행
               </button>
               <button
                 onClick={() => execute("submit")}
                 disabled={busy}
-                className="rounded-lg bg-emerald-600 px-4 py-1 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-40"
+                className="whitespace-nowrap rounded-lg bg-emerald-600 px-4 py-1 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-40"
               >
                 제출
               </button>

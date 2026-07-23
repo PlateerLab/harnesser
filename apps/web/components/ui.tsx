@@ -45,7 +45,9 @@ const badgeColors: Record<string, string> = {
 export function Badge({ value, label }: { value: string; label?: string }) {
   const color = badgeColors[value] || "bg-slate-100 text-slate-700";
   return (
-    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${color}`}>
+    <span
+      className={`inline-block shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold ${color}`}
+    >
       {label ?? value}
     </span>
   );

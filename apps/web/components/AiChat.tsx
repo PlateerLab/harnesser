@@ -87,11 +87,11 @@ export function AiChat({ attemptId, problemId }: { attemptId: string; problemId:
   return (
     <div className="flex h-full flex-col">
       {/* 패널 헤더: 남은 질문 한도 */}
-      <div className="flex h-11 shrink-0 items-center justify-between border-b border-slate-700 px-4">
-        <span className="text-sm font-semibold text-slate-200">AI 어시스턴트</span>
+      <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-slate-700 px-4">
+        <span className="min-w-0 truncate text-sm font-semibold text-slate-200">AI 어시스턴트</span>
         {usage?.enabled && (
           <span
-            className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+            className={`shrink-0 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${
               exhausted
                 ? "bg-red-500/20 text-red-300"
                 : usage.remaining <= Math.max(3, usage.max * 0.15)

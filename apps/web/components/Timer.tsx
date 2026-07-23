@@ -36,7 +36,7 @@ export function Timer({
   const urgent = remaining <= 300;
   return (
     <span
-      className={`rounded-lg px-3 py-1 font-mono text-sm font-bold ${
+      className={`shrink-0 whitespace-nowrap rounded-lg px-3 py-1 font-mono text-sm font-bold ${
         urgent ? "bg-red-500/20 text-red-400" : "bg-slate-700/60 text-slate-200"
       }`}
     >
