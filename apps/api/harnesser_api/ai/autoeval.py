@@ -128,14 +128,17 @@ def parse_eval_json(raw: str) -> dict:
 
 
 async def run_auto_eval(attempt: Attempt, db: AsyncSession) -> Evaluation:
-    if not provider.is_configured():
-        raise RuntimeError("AI가 설정되지 않았습니다 (AI_API_KEY)")
+    cfg = await provider.get_ai_config(db)
+    if not cfg.configured:
+        raise RuntimeError("AI가 설정되지 않았습니다. 관리자 콘솔 > 설정에서 LLM을 연결하세요")
     context = await build_context(attempt, db)
     raw = await provider.complete_chat(
+        cfg,
         [
             {"role": "system", "content": EVAL_PROMPT},
             {"role": "user", "content": context},
-        ]
+        ],
+        use_eval_model=True,
     )
     try:
         data = parse_eval_json(raw)

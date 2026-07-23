@@ -156,6 +156,14 @@ class MyAssignmentOut(BaseModel):
     problem_count: int
     attempt_id: uuid.UUID | None = None
     attempt_status: str | None = None
+    assigned: bool = True  # 스태프 미리보기 목록에서는 미배정 시험도 노출
+
+
+class AiSettingsIn(BaseModel):
+    base_url: str = ""
+    api_key: str | None = None  # None=기존 유지, ""=삭제
+    chat_model: str = ""
+    eval_model: str = ""
 
 
 class SampleCase(BaseModel):
@@ -298,6 +306,7 @@ class ReviewAttemptRow(BaseModel):
     event_count: int = 0
     ai_message_count: int = 0
     has_auto_eval: bool = False
+    is_staff: bool = False  # 관리자/평가자의 체험 응시
 
 
 class InternalTestResult(BaseModel):

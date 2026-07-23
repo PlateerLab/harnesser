@@ -194,6 +194,16 @@ class AiMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
 
+class AppSetting(Base):
+    """플랫폼 전역 설정 (key-value). 예: key='ai' → LLM 공급자 설정 (env보다 우선)."""
+
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String(50), primary_key=True)
+    value: Mapped[dict] = mapped_column(JSONB, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
 class Evaluation(Base):
     __tablename__ = "evaluations"
 

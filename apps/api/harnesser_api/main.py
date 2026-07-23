@@ -6,7 +6,18 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .db import Base, SessionLocal, engine
-from .routers import ai, assessments, attempts, auth, executions, internal, problems, review, users
+from .routers import (
+    ai,
+    assessments,
+    attempts,
+    auth,
+    executions,
+    internal,
+    problems,
+    review,
+    settings as settings_router,
+    users,
+)
 from .seed import seed_if_empty
 
 
@@ -29,7 +40,7 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
 
 
-app = FastAPI(title="Harnesser API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Harnesser API", version="0.2.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -47,6 +58,7 @@ app.include_router(attempts.router)
 app.include_router(executions.router)
 app.include_router(ai.router)
 app.include_router(review.router)
+app.include_router(settings_router.router)
 app.include_router(internal.router)
 
 

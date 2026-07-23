@@ -77,6 +77,29 @@ export interface Assessment {
   assignments: AssignmentRef[];
 }
 
+export interface AiSettings {
+  base_url: string;
+  chat_model: string;
+  eval_model: string;
+  has_key: boolean;
+  key_hint: string | null;
+  effective: {
+    configured: boolean;
+    base_url: string;
+    chat_model: string;
+    eval_model: string;
+    source: "db" | "env" | "none";
+  };
+}
+
+export interface AiTestResult {
+  ok: boolean;
+  latency_ms?: number;
+  model?: string;
+  reply?: string;
+  error?: string;
+}
+
 export interface MyAssignment {
   assessment_id: string;
   title: string;
@@ -88,6 +111,7 @@ export interface MyAssignment {
   problem_count: number;
   attempt_id: string | null;
   attempt_status: string | null;
+  assigned: boolean;
 }
 
 export interface AttemptProblem {
@@ -188,6 +212,7 @@ export interface ReviewAttemptRow {
   event_count: number;
   ai_message_count: number;
   has_auto_eval: boolean;
+  is_staff: boolean;
 }
 
 export interface ReviewDetail {

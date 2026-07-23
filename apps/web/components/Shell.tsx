@@ -20,6 +20,7 @@ export function Shell({ user, children }: { user: User; children: React.ReactNod
         ]
       : []),
     { href: "/review", label: "응시 리뷰" },
+    ...(user.role === "admin" ? [{ href: "/admin/settings", label: "설정" }] : []),
   ];
 
   return (
@@ -47,6 +48,12 @@ export function Shell({ user, children }: { user: User; children: React.ReactNod
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <Link
+              href="/dashboard"
+              className="rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 text-sm font-medium text-violet-700 hover:bg-violet-100"
+            >
+              🧑‍💻 응시자 화면
+            </Link>
             <span className="text-sm text-slate-600">{user.name}</span>
             <Badge value={user.role} />
             <button

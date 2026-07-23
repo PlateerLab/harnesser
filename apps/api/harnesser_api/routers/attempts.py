@@ -55,14 +55,35 @@ async def get_attempt_for(attempt_id: uuid.UUID, user: User, db: AsyncSession) -
 
 @router.get("/my/assignments", response_model=list[MyAssignmentOut])
 async def my_assignments(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    rows = (
-        await db.execute(
-            select(Assignment)
-            .where(Assignment.user_id == user.id)
-            .options(selectinload(Assignment.assessment).selectinload(Assessment.problems))
-            .order_by(Assignment.created_at.desc())
-        )
-    ).scalars().all()
+    is_staff = user.role in ("admin", "evaluator")
+    assigned_ids: set[uuid.UUID] = {
+        r
+        for r in (
+            await db.execute(select(Assignment.assessment_id).where(Assignment.user_id == user.id))
+        ).scalars()
+    }
+    if is_staff:
+        # 스태프는 모든 시험을 체험 응시할 수 있다
+        assessments = (
+            await db.execute(
+                select(Assessment)
+                .options(selectinload(Assessment.problems))
+                .order_by(Assessment.created_at.desc())
+            )
+        ).scalars().all()
+    else:
+        assessments = [
+            asg.assessment
+            for asg in (
+                await db.execute(
+                    select(Assignment)
+                    .where(Assignment.user_id == user.id)
+                    .options(selectinload(Assignment.assessment).selectinload(Assessment.problems))
+                    .order_by(Assignment.created_at.desc())
+                )
+            ).scalars()
+        ]
+
     attempts = (
         await db.execute(select(Attempt).where(Attempt.user_id == user.id))
     ).scalars().all()
@@ -70,8 +91,7 @@ async def my_assignments(user: User = Depends(get_current_user), db: AsyncSessio
         await check_expired(at, db)
     attempt_by_assessment = {at.assessment_id: at for at in attempts}
     out = []
-    for asg in rows:
-        a = asg.assessment
+    for a in assessments:
         at = attempt_by_assessment.get(a.id)
         out.append(
             MyAssignmentOut(
@@ -85,6 +105,7 @@ async def my_assignments(user: User = Depends(get_current_user), db: AsyncSessio
                 problem_count=len(a.problems),
                 attempt_id=at.id if at else None,
                 attempt_status=at.status if at else None,
+                assigned=a.id in assigned_ids,
             )
         )
     return out
@@ -101,10 +122,12 @@ async def start_attempt(
             )
         )
     ).scalar_one_or_none()
-    if not assignment:
+    if not assignment and user.role not in ("admin", "evaluator"):
         raise HTTPException(403, "이 시험에 배정되지 않았습니다")
 
     assessment = await db.get(Assessment, assessment_id)
+    if not assessment:
+        raise HTTPException(404, "시험을 찾을 수 없습니다")
     now = utcnow()
     if assessment.starts_at and now < assessment.starts_at:
         raise HTTPException(400, "아직 시험 시작 시간이 아닙니다")
@@ -167,6 +190,25 @@ async def post_events(
             await _upsert_state(attempt.id, ev.problem_id, ev.payload, db)
     await db.commit()
     return {"ok": True, "recorded": len(events)}
+
+
+@router.delete("/attempts/{attempt_id}")
+async def reset_attempt(
+    attempt_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
+    """응시 기록 초기화 — 관리자는 모든 시도, 평가자는 본인 체험 시도만.
+
+    이벤트/실행/AI 대화/평가가 모두 삭제(cascade)되므로 되돌릴 수 없다.
+    """
+    attempt = await db.get(Attempt, attempt_id)
+    if not attempt:
+        raise HTTPException(404, "응시 정보를 찾을 수 없습니다")
+    allowed = user.role == "admin" or (user.role == "evaluator" and attempt.user_id == user.id)
+    if not allowed:
+        raise HTTPException(403, "응시 초기화 권한이 없습니다")
+    await db.delete(attempt)
+    await db.commit()
+    return {"ok": True}
 
 
 @router.post("/attempts/{attempt_id}/finish", response_model=AttemptOut)

@@ -23,8 +23,9 @@ SYSTEM_PROMPT = """당신은 코딩 테스트 응시자를 돕는 AI 어시스�
 
 
 @router.get("/ai/status")
-async def ai_status(_: User = Depends(get_current_user)):
-    return {"configured": provider.is_configured(), "model": settings.ai_chat_model}
+async def ai_status(_: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    cfg = await provider.get_ai_config(db)
+    return {"configured": cfg.configured, "model": cfg.chat_model}
 
 
 @router.get("/attempts/{attempt_id}/ai/messages", response_model=list[AiMessageOut])
@@ -57,8 +58,9 @@ async def chat(
     assessment = await db.get(Assessment, attempt.assessment_id)
     if assessment.mode != "ai_assisted":
         raise HTTPException(403, "이 시험에서는 AI를 사용할 수 없습니다")
-    if not provider.is_configured():
-        raise HTTPException(503, "AI가 설정되지 않았습니다. 관리자에게 문의하세요 (AI_API_KEY)")
+    cfg = await provider.get_ai_config(db)
+    if not cfg.configured:
+        raise HTTPException(503, "AI가 설정되지 않았습니다. 관리자에게 문의하세요 (관리자 콘솔 > 설정)")
 
     # 컨텍스트 구성: 시스템 + 문제 지문 + 이전 대화 + 새 메시지
     messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -102,7 +104,7 @@ async def chat(
         parts: list[str] = []
         error: str | None = None
         try:
-            async for delta in provider.stream_chat(messages):
+            async for delta in provider.stream_chat(cfg, messages):
                 parts.append(delta)
                 yield f"data: {json.dumps({'delta': delta}, ensure_ascii=False)}\n\n"
         except Exception as e:  # noqa: BLE001 — 오류도 응답으로 전달
@@ -117,7 +119,7 @@ async def chat(
                     problem_id=problem_id,
                     role="assistant",
                     content=content,
-                    model=settings.ai_chat_model,
+                    model=cfg.chat_model,
                     meta={"error": error} if error else {},
                 )
                 s.add(msg)

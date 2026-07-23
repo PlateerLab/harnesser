@@ -96,6 +96,7 @@ async def list_attempts(
                 event_count=event_count,
                 ai_message_count=ai_count,
                 has_auto_eval=has_auto > 0,
+                is_staff=at.user.role != "candidate",
             )
         )
     return rows
