@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ReactNode } from "react";
 
 export function Spinner({ label }: { label?: string }) {
@@ -81,6 +82,39 @@ export function Button({
       disabled={disabled}
       className={`rounded-lg px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed ${styles} ${className}`}
     >
+      {children}
+    </button>
+  );
+}
+
+/** 표 액션용 아이콘 단일 버튼 — title이 접근성 라벨과 툴팁을 겸한다. */
+export function IconButton({
+  title,
+  onClick,
+  href,
+  tone = "default",
+  children,
+}: {
+  title: string;
+  onClick?: () => void;
+  href?: string;
+  tone?: "default" | "danger";
+  children: ReactNode;
+}) {
+  const cls = `inline-flex h-8 w-8 items-center justify-center rounded-lg text-[15px] transition ${
+    tone === "danger"
+      ? "text-slate-400 hover:bg-red-50 hover:text-red-600"
+      : "text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+  }`;
+  if (href) {
+    return (
+      <Link href={href} title={title} aria-label={title} className={cls}>
+        {children}
+      </Link>
+    );
+  }
+  return (
+    <button type="button" title={title} aria-label={title} onClick={onClick} className={cls}>
       {children}
     </button>
   );

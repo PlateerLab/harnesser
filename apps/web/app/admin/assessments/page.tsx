@@ -7,15 +7,25 @@ import type { Assessment } from "@/lib/types";
 import { fmtDateTime } from "@/lib/format";
 import { useUser } from "@/components/useUser";
 import { Shell } from "@/components/Shell";
-import { Badge, Button, Card, EmptyState, Spinner } from "@/components/ui";
+import { DataTable } from "@/components/DataTable";
+import { IconDelete, IconEdit, IconResults } from "@/components/icons";
+import { Badge, Button, IconButton, Spinner } from "@/components/ui";
 
 export default function AssessmentsPage() {
   const { user, loading } = useUser(["admin"]);
   const [rows, setRows] = useState<Assessment[] | null>(null);
 
+  const load = () => api.get<Assessment[]>("/assessments").then(setRows);
+
   useEffect(() => {
-    if (user) api.get<Assessment[]>("/assessments").then(setRows);
+    if (user) load();
   }, [user]);
+
+  const remove = async (a: Assessment) => {
+    if (!confirm(`'${a.title}' 시험을 삭제할까요? 응시 기록도 함께 삭제됩니다.`)) return;
+    await api.del(`/assessments/${a.id}`);
+    load();
+  };
 
   if (loading || !user) return <Spinner />;
 
@@ -27,40 +37,74 @@ export default function AssessmentsPage() {
           <Button>+ 새 시험</Button>
         </Link>
       </div>
+
       {!rows ? (
         <Spinner />
-      ) : rows.length === 0 ? (
-        <EmptyState message="등록된 시험이 없습니다." />
       ) : (
-        <div className="space-y-4">
-          {rows.map((a) => {
-            const done = a.assignments.filter((x) => x.attempt_status && x.attempt_status !== "in_progress").length;
-            return (
-              <Card key={a.id} className="p-5">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Link href={`/admin/assessments/${a.id}`} className="text-lg font-bold hover:underline">
-                        {a.title}
-                      </Link>
-                      <Badge
-                        value={a.mode}
-                        label={a.mode === "ai_assisted" ? "AI 활용" : "일반"}
-                      />
-                    </div>
-                    <p className="mt-1 text-sm text-slate-500">
-                      문제 {a.problems.length}개 · {a.duration_min}분 · 배정 {a.assignments.length}명 · 완료 {done}명
-                      {a.ends_at && ` · 마감 ${fmtDateTime(a.ends_at)}`}
-                    </p>
-                  </div>
-                  <Link href={`/review?assessment_id=${a.id}`}>
-                    <Button variant="secondary">결과 보기</Button>
+        <DataTable
+          rows={rows}
+          rowKey={(a) => a.id}
+          empty="등록된 시험이 없습니다."
+          columns={[
+            {
+              key: "title",
+              header: "시험",
+              render: (a) => (
+                <div className="flex min-w-0 items-center gap-2">
+                  <Link href={`/admin/assessments/${a.id}`} className="truncate font-medium hover:underline">
+                    {a.title}
                   </Link>
+                  <Badge value={a.mode} label={a.mode === "ai_assisted" ? "AI 활용" : "일반"} />
                 </div>
-              </Card>
-            );
-          })}
-        </div>
+              ),
+            },
+            {
+              key: "problems",
+              header: "문제",
+              className: "text-slate-500",
+              render: (a) => `${a.problems.length}개`,
+            },
+            {
+              key: "duration",
+              header: "제한시간",
+              className: "text-slate-500",
+              render: (a) => `${a.duration_min}분`,
+            },
+            {
+              key: "assigned",
+              header: "배정 / 완료",
+              className: "text-slate-500",
+              render: (a) => {
+                const done = a.assignments.filter(
+                  (x) => x.attempt_status && x.attempt_status !== "in_progress",
+                ).length;
+                return `${a.assignments.length}명 / ${done}명`;
+              },
+            },
+            {
+              key: "window",
+              header: "응시 기간",
+              className: "text-slate-500",
+              render: (a) =>
+                a.starts_at || a.ends_at
+                  ? `${a.starts_at ? fmtDateTime(a.starts_at) : "즉시"} ~ ${a.ends_at ? fmtDateTime(a.ends_at) : "제한 없음"}`
+                  : "상시",
+            },
+          ]}
+          actions={(a) => (
+            <>
+              <IconButton title="편집" href={`/admin/assessments/${a.id}`}>
+                <IconEdit />
+              </IconButton>
+              <IconButton title="결과 보기" href={`/review?assessment_id=${a.id}`}>
+                <IconResults />
+              </IconButton>
+              <IconButton title="삭제" tone="danger" onClick={() => remove(a)}>
+                <IconDelete />
+              </IconButton>
+            </>
+          )}
+        />
       )}
     </Shell>
   );
