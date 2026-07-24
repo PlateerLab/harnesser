@@ -26,6 +26,13 @@ export function AiChat({ attemptId, problemId }: { attemptId: string; problemId:
   const [usage, setUsage] = useState<AiUsage | null>(null);
   const [conn, setConn] = useState<ConnState>("connecting");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // 내용에 맞춰 입력창 높이 자동 조절 (최대 160px)
+  const autoGrow = (el: HTMLTextAreaElement) => {
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  };
 
   const wsRef = useRef<WebSocket | null>(null);
   const closedRef = useRef(false);
@@ -265,6 +272,7 @@ export function AiChat({ attemptId, problemId }: { attemptId: string; problemId:
     const content = input.trim();
     if (!content || busy || exhausted) return;
     setInput("");
+    if (inputRef.current) inputRef.current.style.height = "auto";
     setBusy(true);
     setMessages((prev) => [...prev, { role: "user", content, problemId }]);
 
@@ -368,42 +376,79 @@ export function AiChat({ attemptId, problemId }: { attemptId: string; problemId:
               ),
             )}
           </div>
-          <div className="border-t border-slate-700 p-3">
+          <div className="p-3 pt-1">
             {exhausted && (
               <p className="mb-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-300">
                 질문 한도({usage?.max}회)를 모두 사용했습니다. 지금까지의 대화를 참고해 코드를 완성하세요.
               </p>
             )}
-            <div className="flex gap-2">
+            {/* 통합 채팅바 — 입력과 전송/중단 버튼이 한 컨테이너 안에 있다 */}
+            <div
+              className={`rounded-2xl border bg-slate-800 shadow-lg transition-colors ${
+                exhausted
+                  ? "border-slate-700 opacity-60"
+                  : "border-slate-600 focus-within:border-violet-500/70"
+              }`}
+            >
               <textarea
-                className="dark-scroll max-h-32 min-h-[44px] flex-1 resize-none rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-violet-500 focus:outline-none disabled:opacity-50"
-                placeholder={exhausted ? "질문 한도를 모두 사용했습니다" : "질문 입력... (Ctrl+Enter 전송)"}
+                ref={inputRef}
+                rows={1}
+                className="dark-scroll block max-h-40 w-full resize-none bg-transparent px-4 pb-1 pt-3 text-sm text-slate-100 placeholder-slate-500 outline-none disabled:cursor-not-allowed"
+                placeholder={exhausted ? "질문 한도를 모두 사용했습니다" : "AI에게 물어보세요"}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  autoGrow(e.currentTarget);
+                }}
                 onKeyDown={(e) => {
-                  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                  if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                     e.preventDefault();
                     send();
                   }
                 }}
                 disabled={exhausted}
               />
-              {busy && conn === "online" ? (
-                <button
-                  onClick={cancel}
-                  className="shrink-0 self-end whitespace-nowrap rounded-lg border border-slate-600 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-slate-800"
-                >
-                  중단
-                </button>
-              ) : (
-                <button
-                  onClick={send}
-                  disabled={busy || !input.trim() || exhausted}
-                  className="shrink-0 self-end whitespace-nowrap rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-500"
-                >
-                  {busy ? "..." : "전송"}
-                </button>
-              )}
+              <div className="flex items-center justify-between px-2 pb-2 pl-4">
+                <span className="select-none text-[11px] text-slate-600">
+                  Enter 전송 · Shift+Enter 줄바꿈
+                </span>
+                {busy && conn === "online" ? (
+                  <button
+                    onClick={cancel}
+                    title="생성 중단"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-900 transition hover:bg-white"
+                  >
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden>
+                      <rect x="0.5" y="0.5" width="9" height="9" rx="1.5" />
+                    </svg>
+                  </button>
+                ) : (
+                  <button
+                    onClick={send}
+                    disabled={busy || !input.trim() || exhausted}
+                    title="전송 (Enter)"
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition ${
+                      busy || !input.trim() || exhausted
+                        ? "cursor-not-allowed bg-slate-700 text-slate-500"
+                        : "bg-violet-500 text-white hover:bg-violet-400"
+                    }`}
+                  >
+                    {busy ? (
+                      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-500 border-t-slate-200" />
+                    ) : (
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+                        <path
+                          d="M8 13V3M8 3L3.5 7.5M8 3l4.5 4.5"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </>
