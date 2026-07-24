@@ -10,6 +10,7 @@ from ..db import get_db
 from ..deps import require_staff
 from ..models import (
     AiMessage,
+    AiProvider,
     Assessment,
     AssessmentProblem,
     Attempt,
@@ -22,6 +23,7 @@ from ..models import (
 )
 from ..schemas import (
     AiMessageOut,
+    AutoEvalIn,
     EvaluationIn,
     EvaluationOut,
     EventOut,
@@ -218,13 +220,40 @@ async def attempt_detail(attempt_id: uuid.UUID, db: AsyncSession = Depends(get_d
     }
 
 
+@router.get("/ai-providers")
+async def list_eval_providers(db: AsyncSession = Depends(get_db), _=Depends(require_staff)):
+    """자동평가용 공급자 선택 목록 — 평가자도 접근 가능 (키는 노출하지 않음)."""
+    rows = (
+        await db.execute(
+            select(AiProvider).where(AiProvider.enabled.is_(True)).order_by(AiProvider.created_at)
+        )
+    ).scalars().all()
+    return [
+        {
+            "id": str(r.id),
+            "name": r.name,
+            "provider": r.provider,
+            "model": r.model,
+            "is_eval_default": r.is_eval_default,
+        }
+        for r in rows
+    ]
+
+
 @router.post("/attempts/{attempt_id}/autoeval")
-async def trigger_autoeval(attempt_id: uuid.UUID, db: AsyncSession = Depends(get_db), _=Depends(require_staff)):
+async def trigger_autoeval(
+    attempt_id: uuid.UUID,
+    body: AutoEvalIn | None = None,
+    db: AsyncSession = Depends(get_db),
+    _=Depends(require_staff),
+):
     attempt = await db.get(Attempt, attempt_id)
     if not attempt:
         raise HTTPException(404, "응시 정보를 찾을 수 없습니다")
     try:
-        evaluation = await run_auto_eval(attempt, db)
+        evaluation = await run_auto_eval(
+            attempt, db, override_provider_id=body.provider_id if body else None
+        )
     except RuntimeError as e:
         raise HTTPException(503, str(e))
     return _eval_out(evaluation)

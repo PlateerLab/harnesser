@@ -195,6 +195,10 @@ class AiDefaultsIn(BaseModel):
     eval_provider_id: uuid.UUID | None = None
 
 
+class AutoEvalIn(BaseModel):
+    provider_id: uuid.UUID | None = None  # 자동평가에 사용할 공급자 (없으면 평가 기본)
+
+
 class AiTestIn(BaseModel):
     """연결 테스트 — provider_id가 있으면 저장된 키/설정 위에 덮어쓴 값으로 테스트."""
 

@@ -127,8 +127,8 @@ def parse_eval_json(raw: str) -> dict:
     return json.loads(raw)
 
 
-async def run_auto_eval(attempt: Attempt, db: AsyncSession) -> Evaluation:
-    res = await provider.resolve_ai(db, "eval")
+async def run_auto_eval(attempt: Attempt, db: AsyncSession, override_provider_id=None) -> Evaluation:
+    res = await provider.resolve_ai(db, "eval", override_provider_id=override_provider_id)
     if res is None or not res.configured:
         raise RuntimeError("AI가 설정되지 않았습니다. 관리자 콘솔 > 설정에서 LLM 공급자를 연결하세요")
     context = await build_context(attempt, db)

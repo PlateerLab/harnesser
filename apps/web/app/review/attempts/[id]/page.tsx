@@ -20,20 +20,25 @@ import { Timeline } from "@/components/review/Timeline";
 import { SnapshotPlayer } from "@/components/review/SnapshotPlayer";
 
 const TABS = ["개요", "타임라인", "코드 재생", "제출 기록", "AI 대화"] as const;
+type Tab = (typeof TABS)[number];
+
+interface EvalProvider {
+  id: string;
+  name: string;
+  provider: string;
+  model: string;
+  is_eval_default: boolean;
+}
 
 export default function ReviewAttemptPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { user, loading } = useUser(["admin", "evaluator"]);
   const [detail, setDetail] = useState<ReviewDetail | null>(null);
-  const [tab, setTab] = useState<(typeof TABS)[number]>("개요");
-  const [playerProblem, setPlayerProblem] = useState<string>("");
-  const [autoEvalBusy, setAutoEvalBusy] = useState(false);
+  const [tab, setTab] = useState<Tab>("개요");
+  // 시험 → 개별 문제 계층 필터: 타임라인/코드 재생/제출 기록/AI 대화에 공통 적용
+  const [problemFilter, setProblemFilter] = useState<string>("all");
 
-  const load = () =>
-    api.get<ReviewDetail>(`/review/attempts/${id}`).then((d) => {
-      setDetail(d);
-      if (!playerProblem && d.problems.length > 0) setPlayerProblem(d.problems[0].id);
-    });
+  const load = () => api.get<ReviewDetail>(`/review/attempts/${id}`).then(setDetail);
 
   useEffect(() => {
     if (user) load();
@@ -45,18 +50,25 @@ export default function ReviewAttemptPage({ params }: { params: Promise<{ id: st
     [detail],
   );
 
+  // 공통(시험 단위) 지표
   const stats = useMemo(() => {
     if (!detail) return null;
     const ev = detail.events;
     const pastes = ev.filter((e) => e.type === "paste");
+    const totalScore = detail.problems.reduce(
+      (sum, p) => sum + (p.best_score != null ? (p.best_score / 100) * p.points : 0),
+      0,
+    );
+    const maxScore = detail.problems.reduce((sum, p) => sum + p.points, 0);
     return {
-      snapshots: ev.filter((e) => e.type === "code_snapshot").length,
+      totalScore: Math.round(totalScore * 10) / 10,
+      maxScore,
       pastes: pastes.length,
       pasteChars: pastes.reduce((s, e) => s + Number(e.payload.chars ?? 0), 0),
       focusLost: ev.filter((e) => e.type === "focus_lost").length,
       runs: detail.executions.filter((x) => x.kind === "run").length,
       submits: detail.executions.filter((x) => x.kind === "submit").length,
-      aiTurns: detail.ai_messages.length,
+      aiTurns: detail.ai_messages.filter((m) => m.role === "user").length,
       durationS:
         (new Date(detail.attempt.submitted_at ?? detail.attempt.deadline_at).getTime() -
           new Date(detail.attempt.started_at).getTime()) /
@@ -64,72 +76,82 @@ export default function ReviewAttemptPage({ params }: { params: Promise<{ id: st
     };
   }, [detail]);
 
-  const runAutoEval = async () => {
-    setAutoEvalBusy(true);
-    try {
-      await api.post<Evaluation>(`/review/attempts/${id}/autoeval`);
-      await load();
-      setTab("개요");
-    } catch (e) {
-      alert(e instanceof ApiError ? e.message : "자동평가 실패");
-    } finally {
-      setAutoEvalBusy(false);
-    }
+  // 문제 필터 적용 데이터
+  const scopedEvents = useMemo(() => {
+    if (!detail) return [];
+    if (problemFilter === "all") return detail.events;
+    return detail.events.filter((e) => e.problem_id === problemFilter);
+  }, [detail, problemFilter]);
+
+  const scopedExecutions = useMemo(() => {
+    if (!detail) return [];
+    if (problemFilter === "all") return detail.executions;
+    return detail.executions.filter((e) => e.problem_id === problemFilter);
+  }, [detail, problemFilter]);
+
+  const scopedAiMessages = useMemo(() => {
+    if (!detail) return [];
+    if (problemFilter === "all") return detail.ai_messages;
+    return detail.ai_messages.filter((m) => m.problem_id === problemFilter);
+  }, [detail, problemFilter]);
+
+  // 코드 재생은 특정 문제가 필요 — '전체'면 첫 문제로
+  const playerProblemId =
+    problemFilter !== "all" ? problemFilter : (detail?.problems[0]?.id ?? "");
+
+  const openProblemRecords = (problemId: string) => {
+    setProblemFilter(problemId);
+    setTab("제출 기록");
   };
 
   if (loading || !user) return <Spinner />;
   if (!detail || !stats) return <Spinner label="응시 데이터 로딩 중..." />;
 
-  const autoEval = detail.evaluations.find((e) => e.kind === "auto");
-
   return (
     <Shell user={user}>
-      {/* 헤더 */}
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-bold">
-            {detail.candidate.name}
-            <span className="ml-2 text-sm font-normal text-slate-400">{detail.candidate.email}</span>
-          </h1>
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-500">
-            <span>{detail.assessment.title}</span>
-            <Badge value={detail.assessment.mode} label={detail.assessment.mode === "ai_assisted" ? "AI 활용" : "일반"} />
-            <Badge value={detail.attempt.status} label={STATUS_LABEL[detail.attempt.status]} />
-            <span>
-              {fmtDateTime(detail.attempt.started_at)} 시작 · {fmtDuration(stats.durationS)} 소요
-            </span>
-          </div>
+      {/* ── 헤더: 응시 공통 정보만 ── */}
+      <div className="mb-5">
+        <h1 className="text-xl font-bold">
+          {detail.candidate.name}
+          <span className="ml-2 text-sm font-normal text-slate-400">{detail.candidate.email}</span>
+        </h1>
+        <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-500">
+          <span>{detail.assessment.title}</span>
+          <Badge value={detail.assessment.mode} label={detail.assessment.mode === "ai_assisted" ? "AI 활용" : "일반"} />
+          <Badge value={detail.attempt.status} label={STATUS_LABEL[detail.attempt.status]} />
+          <span>
+            {fmtDateTime(detail.attempt.started_at)} 시작 · {fmtDuration(stats.durationS)} 소요
+          </span>
         </div>
-        <Button onClick={runAutoEval} disabled={autoEvalBusy}>
-          {autoEvalBusy ? "AI 평가 중..." : autoEval ? "AI 자동평가 다시 실행" : "AI 자동평가 실행"}
-        </Button>
       </div>
 
-      {/* 요약 통계 */}
-      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-7">
-        {detail.problems.map((p) => (
-          <Card key={p.id} className="p-3 text-center">
-            <div className="truncate text-xs text-slate-400">{p.title}</div>
-            <div className="mt-1 text-lg font-black">
-              {p.best_score != null ? `${Math.round((p.best_score / 100) * p.points)}` : "-"}
-              <span className="text-xs font-normal text-slate-400">/{p.points}</span>
-            </div>
-            {p.best_verdict && <Badge value={p.best_verdict} label={VERDICT_LABEL[p.best_verdict]} />}
-          </Card>
-        ))}
-        <StatCard label="실행/제출" value={`${stats.runs}/${stats.submits}`} />
+      {/* 공통 지표 */}
+      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+        <Card className="p-3 text-center">
+          <div className="text-xs text-slate-400">총점</div>
+          <div className="mt-1 text-lg font-black">
+            {stats.totalScore}
+            <span className="text-xs font-normal text-slate-400">/{stats.maxScore}</span>
+          </div>
+        </Card>
+        <StatCard label="소요 시간" value={fmtDuration(stats.durationS)} />
+        <StatCard label="실행 / 제출" value={`${stats.runs} / ${stats.submits}`} />
         <StatCard label="붙여넣기" value={`${stats.pastes}회`} warn={stats.pastes > 0} sub={`${stats.pasteChars}자`} />
         <StatCard label="화면 이탈" value={`${stats.focusLost}회`} warn={stats.focusLost > 2} />
-        {detail.assessment.mode === "ai_assisted" && <StatCard label="AI 대화" value={`${stats.aiTurns}턴`} />}
+        {detail.assessment.mode === "ai_assisted" ? (
+          <StatCard label="AI 질문" value={`${stats.aiTurns}턴`} />
+        ) : (
+          <StatCard label="스냅샷" value={`${detail.events.filter((e) => e.type === "code_snapshot").length}회`} />
+        )}
       </div>
 
-      {/* 탭 */}
-      <div className="mb-4 flex gap-1 border-b border-slate-200">
+      {/* ── 탭 + 문제 계층 필터 ── */}
+      <div className="mb-3 flex gap-1 border-b border-slate-200">
         {TABS.filter((t) => t !== "AI 대화" || detail.assessment.mode === "ai_assisted").map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`border-b-2 px-4 py-2 text-sm font-medium ${
+            className={`whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium ${
               tab === t ? "border-slate-900 text-slate-900" : "border-transparent text-slate-400 hover:text-slate-600"
             }`}
           >
@@ -138,50 +160,81 @@ export default function ReviewAttemptPage({ params }: { params: Promise<{ id: st
         ))}
       </div>
 
+      {tab !== "개요" && (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <span className="text-xs text-slate-400">범위</span>
+          {tab !== "코드 재생" && (
+            <button
+              onClick={() => setProblemFilter("all")}
+              className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium ${
+                problemFilter === "all" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              시험 전체
+            </button>
+          )}
+          {detail.problems.map((p, i) => (
+            <button
+              key={p.id}
+              onClick={() => setProblemFilter(p.id)}
+              className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium ${
+                problemFilter === p.id || (tab === "코드 재생" && playerProblemId === p.id)
+                  ? "bg-slate-900 text-white"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              {i + 1}. {p.title}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ── 탭 내용 ── */}
       {tab === "개요" && (
-        <OverviewTab detail={detail} attemptId={id} onSaved={load} />
+        <OverviewTab
+          detail={detail}
+          attemptId={id}
+          onSaved={load}
+          onOpenProblem={openProblemRecords}
+          aiTurnsByProblem={detail.ai_messages.reduce<Record<string, number>>((acc, m) => {
+            if (m.role === "user" && m.problem_id) acc[m.problem_id] = (acc[m.problem_id] ?? 0) + 1;
+            return acc;
+          }, {})}
+        />
       )}
 
       {tab === "타임라인" && (
         <Card className="p-5">
-          <Timeline events={detail.events} startIso={detail.attempt.started_at} problemTitles={problemTitles} />
+          <Timeline events={scopedEvents} startIso={detail.attempt.started_at} problemTitles={problemTitles} />
         </Card>
       )}
 
       {tab === "코드 재생" && (
         <Card className="p-5">
-          <div className="mb-4 flex gap-2">
-            {detail.problems.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => setPlayerProblem(p.id)}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
-                  playerProblem === p.id ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"
-                }`}
-              >
-                {p.title}
-              </button>
-            ))}
-          </div>
-          <SnapshotPlayer events={detail.events} problemId={playerProblem} startIso={detail.attempt.started_at} />
+          <SnapshotPlayer events={detail.events} problemId={playerProblemId} startIso={detail.attempt.started_at} />
         </Card>
       )}
 
-      {tab === "제출 기록" && <ExecutionsTab detail={detail} problemTitles={problemTitles} />}
+      {tab === "제출 기록" && (
+        <ExecutionsList detail={detail} executions={scopedExecutions} problemTitles={problemTitles} />
+      )}
 
       {tab === "AI 대화" && (
         <Card className="space-y-4 p-6">
-          {detail.ai_messages.length === 0 && (
-            <p className="py-8 text-center text-sm text-slate-400">AI 대화 기록이 없습니다.</p>
+          {scopedAiMessages.length === 0 && (
+            <p className="py-8 text-center text-sm text-slate-400">
+              {problemFilter === "all" ? "AI 대화 기록이 없습니다." : "이 문제에서의 AI 대화가 없습니다."}
+            </p>
           )}
-          {detail.ai_messages.map((m) => (
+          {scopedAiMessages.map((m) => (
             <div key={m.id} className={m.role === "user" ? "ml-12" : "mr-6"}>
               <div className="mb-1 flex items-center gap-2 text-xs text-slate-400">
                 <span className="font-semibold">{m.role === "user" ? "응시자" : "AI"}</span>
                 <span>{fmtOffset(detail.attempt.started_at, m.created_at)}</span>
-                {m.problem_id && (
+                {m.problem_id && problemFilter === "all" && (
                   <span className="rounded bg-slate-100 px-1.5">{problemTitles[m.problem_id]}</span>
                 )}
+                {m.model && m.role === "assistant" && <span className="text-slate-300">{m.model}</span>}
               </div>
               <div
                 className={`rounded-xl px-4 py-3 text-sm ${
@@ -208,21 +261,51 @@ function StatCard({ label, value, sub, warn }: { label: string; value: string; s
   );
 }
 
+/** 개요 — 문제별 결과 + AI 자동평가(공급자 선택) + 평가자 의견 */
 function OverviewTab({
   detail,
   attemptId,
   onSaved,
+  onOpenProblem,
+  aiTurnsByProblem,
 }: {
   detail: ReviewDetail;
   attemptId: string;
   onSaved: () => void;
+  onOpenProblem: (problemId: string) => void;
+  aiTurnsByProblem: Record<string, number>;
 }) {
   const [score, setScore] = useState("");
   const [summary, setSummary] = useState("");
   const [busy, setBusy] = useState(false);
+  const [providers, setProviders] = useState<EvalProvider[]>([]);
+  const [evalProviderId, setEvalProviderId] = useState("");
+  const [evalBusy, setEvalBusy] = useState(false);
+
+  useEffect(() => {
+    api.get<EvalProvider[]>("/review/ai-providers").then((rows) => {
+      setProviders(rows);
+      const def = rows.find((r) => r.is_eval_default) ?? rows[0];
+      if (def) setEvalProviderId(def.id);
+    });
+  }, []);
 
   const autoEvals = detail.evaluations.filter((e) => e.kind === "auto");
   const humanEvals = detail.evaluations.filter((e) => e.kind === "human");
+
+  const runAutoEval = async () => {
+    setEvalBusy(true);
+    try {
+      await api.post<Evaluation>(`/review/attempts/${attemptId}/autoeval`, {
+        provider_id: evalProviderId || null,
+      });
+      onSaved();
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : "자동평가 실패");
+    } finally {
+      setEvalBusy(false);
+    }
+  };
 
   const saveHuman = async () => {
     if (!summary.trim()) return alert("평가 의견을 입력하세요");
@@ -241,145 +324,252 @@ function OverviewTab({
   };
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-      <div className="space-y-4">
-        <h2 className="font-bold">AI 자동평가</h2>
-        {autoEvals.length === 0 && (
-          <Card className="p-6 text-center text-sm text-slate-400">
-            아직 자동평가가 없습니다. 우측 상단 버튼으로 실행하세요.
-          </Card>
-        )}
-        {autoEvals.map((ev) => {
-          const s = ev.scores as {
-            overall_score?: number;
-            criteria?: Record<string, number | null>;
-            strengths?: string[];
-            concerns?: string[];
-            integrity_flags?: string[];
-          };
-          return (
-            <Card key={ev.id} className="space-y-4 p-5">
-              <div className="flex items-center justify-between">
-                <span className="text-3xl font-black">
-                  {s.overall_score ?? "-"}
-                  <span className="text-sm font-normal text-slate-400">/100</span>
-                </span>
-                <span className="text-xs text-slate-400">{fmtDateTime(ev.created_at)}</span>
-              </div>
-              {s.criteria && (
-                <div className="grid grid-cols-2 gap-2">
-                  {Object.entries({
-                    correctness: "정답성",
-                    code_quality: "코드 품질",
-                    process: "풀이 과정",
-                    ai_utilization: "AI 활용",
-                  }).map(([key, label]) =>
-                    s.criteria![key] != null ? (
-                      <div key={key} className="rounded-lg bg-slate-50 p-2 text-center">
-                        <div className="text-xs text-slate-400">{label}</div>
-                        <div className="font-bold">{s.criteria![key]}</div>
+    <div className="space-y-6">
+      {/* 문제별 결과 — 시험 → 문제 계층의 진입점 */}
+      <Card>
+        <div className="border-b border-slate-100 px-5 py-3 text-sm font-bold">문제별 결과</div>
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-100 text-left text-xs text-slate-400">
+              <th className="px-5 py-2.5 font-medium">문제</th>
+              <th className="px-4 py-2.5 font-medium">점수</th>
+              <th className="px-4 py-2.5 font-medium">최고 판정</th>
+              <th className="px-4 py-2.5 font-medium">실행 / 제출</th>
+              <th className="px-4 py-2.5 font-medium">AI 질문</th>
+              <th className="px-4 py-2.5 font-medium">최종 언어</th>
+              <th className="w-0 px-4 py-2.5" />
+            </tr>
+          </thead>
+          <tbody>
+            {detail.problems.map((p, i) => {
+              const runs = detail.executions.filter((e) => e.problem_id === p.id && e.kind === "run").length;
+              const submits = detail.executions.filter((e) => e.problem_id === p.id && e.kind === "submit").length;
+              const earned = p.best_score != null ? Math.round((p.best_score / 100) * p.points * 10) / 10 : null;
+              return (
+                <tr key={p.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
+                  <td className="px-5 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">
+                        {i + 1}. {p.title}
+                      </span>
+                      <Badge value={p.difficulty} label={DIFFICULTY_LABEL[p.difficulty]} />
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold">
+                        {earned ?? "-"}
+                        <span className="font-normal text-slate-400">/{p.points}</span>
+                      </span>
+                      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-slate-100">
+                        <div
+                          className={`h-full rounded-full ${
+                            (p.best_score ?? 0) >= 100 ? "bg-emerald-500" : (p.best_score ?? 0) > 0 ? "bg-amber-400" : "bg-slate-200"
+                          }`}
+                          style={{ width: `${p.best_score ?? 0}%` }}
+                        />
                       </div>
-                    ) : null,
-                  )}
-                </div>
-              )}
-              <div className="text-sm text-slate-700">
-                <Markdown>{ev.summary}</Markdown>
-              </div>
-              {!!s.strengths?.length && (
-                <div className="text-sm">
-                  <span className="font-semibold text-emerald-600">강점</span>
-                  <ul className="ml-4 list-disc text-slate-600">
-                    {s.strengths.map((x, i) => (
-                      <li key={i}>{x}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {!!s.concerns?.length && (
-                <div className="text-sm">
-                  <span className="font-semibold text-amber-600">우려</span>
-                  <ul className="ml-4 list-disc text-slate-600">
-                    {s.concerns.map((x, i) => (
-                      <li key={i}>{x}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {!!s.integrity_flags?.length && (
-                <div className="rounded-lg bg-red-50 p-3 text-sm">
-                  <span className="font-semibold text-red-600">무결성 플래그</span>
-                  <ul className="ml-4 list-disc text-red-700">
-                    {s.integrity_flags.map((x, i) => (
-                      <li key={i}>{x}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </Card>
-          );
-        })}
-      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    {p.best_verdict ? (
+                      <Badge value={p.best_verdict} label={VERDICT_LABEL[p.best_verdict]} />
+                    ) : (
+                      <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-600">
+                        미제출
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-slate-500">
+                    {runs} / {submits}
+                  </td>
+                  <td className="px-4 py-3 text-slate-500">{aiTurnsByProblem[p.id] ?? 0}턴</td>
+                  <td className="px-4 py-3 text-slate-500">{p.final_language ?? "-"}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-right">
+                    <button
+                      onClick={() => onOpenProblem(p.id)}
+                      className="whitespace-nowrap rounded-lg border border-slate-200 px-2.5 py-1 text-xs text-slate-600 hover:border-slate-400 hover:text-slate-900"
+                    >
+                      기록 보기
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </Card>
 
-      <div className="space-y-4">
-        <h2 className="font-bold">평가자 의견</h2>
-        {humanEvals.map((ev) => (
-          <Card key={ev.id} className="p-5">
-            <div className="mb-2 flex items-center justify-between text-xs text-slate-400">
-              <span className="font-semibold text-slate-600">
-                {ev.evaluator_name ?? "평가자"}
-                {(ev.scores as { overall_score?: number }).overall_score != null &&
-                  ` · ${(ev.scores as { overall_score?: number }).overall_score}점`}
-              </span>
-              <span>{fmtDateTime(ev.created_at)}</span>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* AI 자동평가 */}
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-bold">AI 자동평가</h2>
+            <div className="flex items-center gap-2">
+              <select
+                className="max-w-52 truncate rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700"
+                value={evalProviderId}
+                onChange={(e) => setEvalProviderId(e.target.value)}
+                disabled={evalBusy}
+              >
+                {providers.length === 0 && <option value="">공급자 없음</option>}
+                {providers.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} — {p.model}
+                  </option>
+                ))}
+              </select>
+              <Button onClick={runAutoEval} disabled={evalBusy || providers.length === 0}>
+                {evalBusy ? "평가 중..." : autoEvals.length > 0 ? "다시 실행" : "실행"}
+              </Button>
             </div>
-            <p className="whitespace-pre-wrap text-sm text-slate-700">{ev.summary}</p>
-          </Card>
-        ))}
-        <Card className="space-y-3 p-5">
-          <Field label="점수 (선택, 0~100)">
-            <input
-              className={inputCls}
-              type="number"
-              min={0}
-              max={100}
-              value={score}
-              onChange={(e) => setScore(e.target.value)}
-            />
-          </Field>
-          <Field label="평가 의견">
-            <textarea
-              className={`${inputCls} min-h-28`}
-              value={summary}
-              onChange={(e) => setSummary(e.target.value)}
-              placeholder="응시 과정, 코드 품질, AI 활용 태도 등에 대한 종합 의견"
-            />
-          </Field>
-          <div className="flex justify-end">
-            <Button onClick={saveHuman} disabled={busy}>
-              평가 저장
-            </Button>
           </div>
-        </Card>
+          {autoEvals.length === 0 && (
+            <Card className="p-6 text-center text-sm text-slate-400">
+              아직 자동평가가 없습니다. 공급자를 선택하고 실행하세요.
+            </Card>
+          )}
+          {autoEvals.map((ev) => {
+            const s = ev.scores as {
+              overall_score?: number;
+              criteria?: Record<string, number | null>;
+              strengths?: string[];
+              concerns?: string[];
+              integrity_flags?: string[];
+              evaluated_by?: { name?: string; model?: string };
+            };
+            return (
+              <Card key={ev.id} className="space-y-4 p-5">
+                <div className="flex items-center justify-between">
+                  <span className="text-3xl font-black">
+                    {s.overall_score ?? "-"}
+                    <span className="text-sm font-normal text-slate-400">/100</span>
+                  </span>
+                  <div className="text-right text-xs text-slate-400">
+                    <div>{fmtDateTime(ev.created_at)}</div>
+                    {s.evaluated_by?.model && <div>{s.evaluated_by.model}</div>}
+                  </div>
+                </div>
+                {s.criteria && (
+                  <div className="grid grid-cols-2 gap-2">
+                    {Object.entries({
+                      correctness: "정답성",
+                      code_quality: "코드 품질",
+                      process: "풀이 과정",
+                      ai_utilization: "AI 활용",
+                    }).map(([key, label]) =>
+                      s.criteria![key] != null ? (
+                        <div key={key} className="rounded-lg bg-slate-50 p-2 text-center">
+                          <div className="text-xs text-slate-400">{label}</div>
+                          <div className="font-bold">{s.criteria![key]}</div>
+                        </div>
+                      ) : null,
+                    )}
+                  </div>
+                )}
+                <div className="text-sm text-slate-700">
+                  <Markdown>{ev.summary}</Markdown>
+                </div>
+                {!!s.strengths?.length && (
+                  <div className="text-sm">
+                    <span className="font-semibold text-emerald-600">강점</span>
+                    <ul className="ml-4 list-disc text-slate-600">
+                      {s.strengths.map((x, i) => (
+                        <li key={i}>{x}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {!!s.concerns?.length && (
+                  <div className="text-sm">
+                    <span className="font-semibold text-amber-600">우려</span>
+                    <ul className="ml-4 list-disc text-slate-600">
+                      {s.concerns.map((x, i) => (
+                        <li key={i}>{x}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {!!s.integrity_flags?.length && (
+                  <div className="rounded-lg bg-red-50 p-3 text-sm">
+                    <span className="font-semibold text-red-600">무결성 플래그</span>
+                    <ul className="ml-4 list-disc text-red-700">
+                      {s.integrity_flags.map((x, i) => (
+                        <li key={i}>{x}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </Card>
+            );
+          })}
+        </div>
+
+        {/* 평가자 의견 */}
+        <div className="space-y-4">
+          <h2 className="font-bold">평가자 의견</h2>
+          {humanEvals.map((ev) => (
+            <Card key={ev.id} className="p-5">
+              <div className="mb-2 flex items-center justify-between text-xs text-slate-400">
+                <span className="font-semibold text-slate-600">
+                  {ev.evaluator_name ?? "평가자"}
+                  {(ev.scores as { overall_score?: number }).overall_score != null &&
+                    ` · ${(ev.scores as { overall_score?: number }).overall_score}점`}
+                </span>
+                <span>{fmtDateTime(ev.created_at)}</span>
+              </div>
+              <p className="whitespace-pre-wrap text-sm text-slate-700">{ev.summary}</p>
+            </Card>
+          ))}
+          <Card className="space-y-3 p-5">
+            <Field label="점수 (선택, 0~100)">
+              <input
+                className={inputCls}
+                type="number"
+                min={0}
+                max={100}
+                value={score}
+                onChange={(e) => setScore(e.target.value)}
+              />
+            </Field>
+            <Field label="평가 의견">
+              <textarea
+                className={`${inputCls} min-h-28`}
+                value={summary}
+                onChange={(e) => setSummary(e.target.value)}
+                placeholder="응시 과정, 코드 품질, AI 활용 태도 등에 대한 종합 의견"
+              />
+            </Field>
+            <div className="flex justify-end">
+              <Button onClick={saveHuman} disabled={busy}>
+                평가 저장
+              </Button>
+            </div>
+          </Card>
+        </div>
       </div>
     </div>
   );
 }
 
-function ExecutionsTab({
+function ExecutionsList({
   detail,
+  executions,
   problemTitles,
 }: {
   detail: ReviewDetail;
+  executions: ReviewDetail["executions"];
   problemTitles: Record<string, string>;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
   return (
     <div className="space-y-3">
-      {detail.executions.length === 0 && (
-        <p className="py-8 text-center text-sm text-slate-400">실행 기록이 없습니다.</p>
+      {executions.length === 0 && (
+        <Card>
+          <p className="py-8 text-center text-sm text-slate-400">해당 범위의 실행 기록이 없습니다.</p>
+        </Card>
       )}
-      {detail.executions.map((ex) => (
+      {executions.map((ex) => (
         <Card key={ex.id} className="p-4">
           <div
             className="flex cursor-pointer flex-wrap items-center gap-3 text-sm"
@@ -388,7 +578,13 @@ function ExecutionsTab({
             <span className="font-mono text-xs text-slate-400">
               {fmtOffset(detail.attempt.started_at, ex.created_at)}
             </span>
-            <Badge value={ex.kind === "submit" ? "ai_assisted" : "standard"} label={ex.kind === "submit" ? "제출" : "실행"} />
+            <span
+              className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold ${
+                ex.kind === "submit" ? "bg-violet-100 text-violet-700" : "bg-slate-100 text-slate-600"
+              }`}
+            >
+              {ex.kind === "submit" ? "제출" : "실행"}
+            </span>
             <span className="font-medium">{problemTitles[ex.problem_id]}</span>
             <span className="text-slate-500">{ex.language}</span>
             {ex.verdict && <Badge value={ex.verdict} label={VERDICT_LABEL[ex.verdict]} />}
