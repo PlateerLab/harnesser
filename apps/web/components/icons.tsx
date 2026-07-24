@@ -6,4 +6,5 @@ export {
   FiBarChart2 as IconResults,
   FiEye as IconView,
   FiPlus as IconAdd,
+  FiSearch as IconSearch,
 } from "react-icons/fi";

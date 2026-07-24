@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ReactNode } from "react";
+import { IconSearch } from "./icons";
 
 export function Spinner({ label }: { label?: string }) {
   return (
@@ -84,6 +85,32 @@ export function Button({
     >
       {children}
     </button>
+  );
+}
+
+/** 목록 헤더용 검색창 */
+export function SearchInput({
+  value,
+  onChange,
+  placeholder = "검색...",
+  className = "",
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  return (
+    <div className={`relative ${className}`}>
+      <IconSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+      <input
+        type="search"
+        className="w-56 rounded-lg border border-slate-300 bg-white py-2 pl-8 pr-3 text-sm placeholder-slate-400 focus:border-slate-500 focus:outline-none"
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </div>
   );
 }
 

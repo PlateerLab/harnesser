@@ -10,7 +10,6 @@ export default function NewAssessmentPage() {
   if (loading || !user) return <Spinner />;
   return (
     <Shell user={user}>
-      <h1 className="mb-6 text-xl font-bold">새 시험</h1>
       <AssessmentForm />
     </Shell>
   );

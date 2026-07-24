@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import type { AiProviderRow, Assessment, ProblemSummary, User } from "@/lib/types";
 import { DIFFICULTY_LABEL } from "@/lib/format";
-import { Badge, Button, Card, Field, inputCls } from "./ui";
+import { Badge, Button, Card, Field, inputCls, SearchInput } from "./ui";
 
 interface FormState {
   title: string;
@@ -25,6 +25,15 @@ function toLocalInput(iso: string | null): string {
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function SectionTitle({ title, sub }: { title: string; sub?: string }) {
+  return (
+    <div>
+      <h2 className="text-sm font-bold text-slate-800">{title}</h2>
+      {sub && <p className="mt-0.5 text-xs text-slate-400">{sub}</p>}
+    </div>
+  );
 }
 
 export function AssessmentForm({ initial, assessmentId }: { initial?: Assessment; assessmentId?: string }) {
@@ -58,6 +67,8 @@ export function AssessmentForm({ initial, assessmentId }: { initial?: Assessment
   const [allProblems, setAllProblems] = useState<ProblemSummary[]>([]);
   const [candidates, setCandidates] = useState<User[]>([]);
   const [providers, setProviders] = useState<AiProviderRow[]>([]);
+  const [problemQ, setProblemQ] = useState("");
+  const [candidateQ, setCandidateQ] = useState("");
   const [busy, setBusy] = useState(false);
   const router = useRouter();
 
@@ -69,6 +80,20 @@ export function AssessmentForm({ initial, assessmentId }: { initial?: Assessment
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
+
+  const filteredProblems = useMemo(() => {
+    const q = problemQ.trim().toLowerCase();
+    if (!q) return allProblems;
+    return allProblems.filter((p) => p.title.toLowerCase().includes(q));
+  }, [allProblems, problemQ]);
+
+  const filteredCandidates = useMemo(() => {
+    const q = candidateQ.trim().toLowerCase();
+    if (!q) return candidates;
+    return candidates.filter(
+      (c) => c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q),
+    );
+  }, [candidates, candidateQ]);
 
   const toggleProblem = (id: string) => {
     const exists = form.problems.some((p) => p.problem_id === id);
@@ -110,15 +135,50 @@ export function AssessmentForm({ initial, assessmentId }: { initial?: Assessment
     router.push("/admin/assessments");
   };
 
+  const isAi = form.mode === "ai_assisted";
+
   return (
     <div className="space-y-6">
-      <Card className="space-y-4 p-6">
+      {/* 페이지 헤더 — 액션 상시 노출 */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold">{assessmentId ? "시험 편집" : "새 시험"}</h1>
+          <p className="mt-0.5 truncate text-sm text-slate-400">
+            {form.title || "시험 정보를 입력하고 문제와 응시자를 배정하세요"}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {assessmentId && (
+            <button
+              onClick={remove}
+              className="whitespace-nowrap rounded-lg px-3 py-2 text-sm text-red-500 hover:bg-red-50"
+            >
+              삭제
+            </button>
+          )}
+          <Button variant="secondary" onClick={() => router.push("/admin/assessments")}>
+            취소
+          </Button>
+          <Button onClick={save} disabled={busy}>
+            {busy ? "저장 중..." : "저장"}
+          </Button>
+        </div>
+      </div>
+
+      {/* 기본 정보 */}
+      <Card className="space-y-5 p-6">
+        <SectionTitle title="기본 정보" sub="시험 이름과 모드, 응시 시간을 설정합니다" />
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Field label="시험 제목">
-            <input className={inputCls} value={form.title} onChange={(e) => set("title", e.target.value)} />
+            <input
+              className={inputCls}
+              value={form.title}
+              onChange={(e) => set("title", e.target.value)}
+              placeholder="예: 백엔드 개발자 코딩 테스트"
+            />
           </Field>
           <Field label="모드">
-            <div className="flex gap-2 pt-1">
+            <div className="flex gap-2 pt-0.5">
               {(
                 [
                   ["standard", "일반 코딩 테스트"],
@@ -128,12 +188,12 @@ export function AssessmentForm({ initial, assessmentId }: { initial?: Assessment
                 <button
                   key={mode}
                   onClick={() => set("mode", mode)}
-                  className={`rounded-lg px-4 py-2 text-sm font-medium ${
+                  className={`whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition ${
                     form.mode === mode
                       ? mode === "ai_assisted"
                         ? "bg-violet-600 text-white"
                         : "bg-slate-900 text-white"
-                      : "border border-slate-300 text-slate-600"
+                      : "border border-slate-300 text-slate-600 hover:bg-slate-50"
                   }`}
                 >
                   {label}
@@ -142,14 +202,46 @@ export function AssessmentForm({ initial, assessmentId }: { initial?: Assessment
             </div>
           </Field>
         </div>
-        <Field label="설명">
+        <Field label="설명" hint="응시자 대시보드에 표시됩니다">
           <textarea
             className={`${inputCls} min-h-16`}
             value={form.description}
             onChange={(e) => set("description", e.target.value)}
           />
         </Field>
-        {form.mode === "ai_assisted" && (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <Field label="제한시간 (분)">
+            <input
+              className={inputCls}
+              type="number"
+              min={5}
+              value={form.duration_min}
+              onChange={(e) => set("duration_min", Number(e.target.value))}
+            />
+          </Field>
+          <Field label="응시 시작 가능 (선택)">
+            <input
+              className={inputCls}
+              type="datetime-local"
+              value={toLocalInput(form.starts_at)}
+              onChange={(e) => set("starts_at", e.target.value || null)}
+            />
+          </Field>
+          <Field label="응시 마감 (선택)">
+            <input
+              className={inputCls}
+              type="datetime-local"
+              value={toLocalInput(form.ends_at)}
+              onChange={(e) => set("ends_at", e.target.value || null)}
+            />
+          </Field>
+        </div>
+      </Card>
+
+      {/* AI 설정 — ai_assisted 모드에서만 */}
+      {isAi && (
+        <Card className="space-y-5 border-violet-200 p-6">
+          <SectionTitle title="AI 설정" sub="응시자에게 제공되는 AI 어시스턴트의 한도와 모델" />
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Field
               label="AI 질문 한도 (회)"
@@ -184,40 +276,17 @@ export function AssessmentForm({ initial, assessmentId }: { initial?: Assessment
               </select>
             </Field>
           </div>
-        )}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <Field label="제한시간 (분)">
-            <input
-              className={inputCls}
-              type="number"
-              min={5}
-              value={form.duration_min}
-              onChange={(e) => set("duration_min", Number(e.target.value))}
-            />
-          </Field>
-          <Field label="응시 시작 가능 (선택)">
-            <input
-              className={inputCls}
-              type="datetime-local"
-              value={toLocalInput(form.starts_at)}
-              onChange={(e) => set("starts_at", e.target.value || null)}
-            />
-          </Field>
-          <Field label="응시 마감 (선택)">
-            <input
-              className={inputCls}
-              type="datetime-local"
-              value={toLocalInput(form.ends_at)}
-              onChange={(e) => set("ends_at", e.target.value || null)}
-            />
-          </Field>
-        </div>
-      </Card>
+        </Card>
+      )}
 
+      {/* 출제 문제 */}
       <Card className="p-6">
-        <h2 className="mb-3 font-bold">출제 문제 ({form.problems.length}개 선택)</h2>
-        <div className="space-y-2">
-          {allProblems.map((p) => {
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <SectionTitle title="출제 문제" sub={`${form.problems.length}개 선택됨`} />
+          <SearchInput value={problemQ} onChange={setProblemQ} placeholder="문제 제목 검색..." />
+        </div>
+        <div className="max-h-96 space-y-2 overflow-y-auto pr-1">
+          {filteredProblems.map((p) => {
             const selected = form.problems.find((x) => x.problem_id === p.id);
             return (
               <div
@@ -226,13 +295,13 @@ export function AssessmentForm({ initial, assessmentId }: { initial?: Assessment
                   selected ? "border-slate-900 bg-slate-50" : "border-slate-200"
                 }`}
               >
-                <label className="flex flex-1 cursor-pointer items-center gap-3">
+                <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
                   <input type="checkbox" checked={!!selected} onChange={() => toggleProblem(p.id)} />
-                  <span className="font-medium">{p.title}</span>
+                  <span className="truncate font-medium">{p.title}</span>
                   <Badge value={p.difficulty} label={DIFFICULTY_LABEL[p.difficulty]} />
                 </label>
                 {selected && (
-                  <label className="flex items-center gap-2 text-sm text-slate-500">
+                  <label className="flex shrink-0 items-center gap-2 text-sm text-slate-500">
                     배점
                     <input
                       className="w-20 rounded border border-slate-300 px-2 py-1"
@@ -252,13 +321,22 @@ export function AssessmentForm({ initial, assessmentId }: { initial?: Assessment
               </div>
             );
           })}
+          {filteredProblems.length === 0 && (
+            <p className="py-8 text-center text-sm text-slate-400">
+              {problemQ ? "검색 결과가 없습니다." : "등록된 문제가 없습니다. 문제 메뉴에서 먼저 생성하세요."}
+            </p>
+          )}
         </div>
       </Card>
 
+      {/* 응시자 배정 */}
       <Card className="p-6">
-        <h2 className="mb-3 font-bold">응시자 배정 ({form.assignee_ids.length}명)</h2>
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-          {candidates.map((c) => (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <SectionTitle title="응시자 배정" sub={`${form.assignee_ids.length}명 배정됨`} />
+          <SearchInput value={candidateQ} onChange={setCandidateQ} placeholder="이름/이메일 검색..." />
+        </div>
+        <div className="grid max-h-96 grid-cols-1 gap-2 overflow-y-auto pr-1 md:grid-cols-2">
+          {filteredCandidates.map((c) => (
             <label
               key={c.id}
               className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 ${
@@ -270,33 +348,17 @@ export function AssessmentForm({ initial, assessmentId }: { initial?: Assessment
                 checked={form.assignee_ids.includes(c.id)}
                 onChange={() => toggleAssignee(c.id)}
               />
-              <span className="font-medium">{c.name}</span>
-              <span className="text-sm text-slate-400">{c.email}</span>
+              <span className="shrink-0 font-medium">{c.name}</span>
+              <span className="truncate text-sm text-slate-400">{c.email}</span>
             </label>
           ))}
-          {candidates.length === 0 && (
-            <p className="text-sm text-slate-400">응시자 계정이 없습니다. 사용자 메뉴에서 먼저 생성하세요.</p>
+          {filteredCandidates.length === 0 && (
+            <p className="col-span-full py-8 text-center text-sm text-slate-400">
+              {candidateQ ? "검색 결과가 없습니다." : "응시자 계정이 없습니다. 사용자 메뉴에서 먼저 생성하세요."}
+            </p>
           )}
         </div>
       </Card>
-
-      <div className="flex justify-between">
-        {assessmentId ? (
-          <Button variant="danger" onClick={remove}>
-            시험 삭제
-          </Button>
-        ) : (
-          <span />
-        )}
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => router.push("/admin/assessments")}>
-            취소
-          </Button>
-          <Button onClick={save} disabled={busy}>
-            {busy ? "저장 중..." : "저장"}
-          </Button>
-        </div>
-      </div>
     </div>
   );
 }

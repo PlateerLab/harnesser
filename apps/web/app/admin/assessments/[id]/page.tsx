@@ -20,7 +20,6 @@ export default function EditAssessmentPage({ params }: { params: Promise<{ id: s
   if (loading || !user || !assessment) return <Spinner />;
   return (
     <Shell user={user}>
-      <h1 className="mb-6 text-xl font-bold">시험 편집</h1>
       <AssessmentForm initial={assessment} assessmentId={id} />
     </Shell>
   );

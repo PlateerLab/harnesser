@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import type { ReviewAttemptRow } from "@/lib/types";
@@ -9,23 +9,35 @@ import { useUser } from "@/components/useUser";
 import { Shell } from "@/components/Shell";
 import { DataTable } from "@/components/DataTable";
 import { IconDelete, IconView } from "@/components/icons";
-import { Badge, IconButton, Spinner } from "@/components/ui";
+import { Badge, IconButton, SearchInput, Spinner } from "@/components/ui";
 
 function ReviewList() {
   const { user, loading } = useUser(["admin", "evaluator"]);
   const [rows, setRows] = useState<ReviewAttemptRow[] | null>(null);
+  const [q, setQ] = useState("");
   const searchParams = useSearchParams();
   const assessmentId = searchParams.get("assessment_id");
 
   const load = () => {
-    const q = assessmentId ? `?assessment_id=${assessmentId}` : "";
-    return api.get<ReviewAttemptRow[]>(`/review/attempts${q}`).then(setRows);
+    const qs = assessmentId ? `?assessment_id=${assessmentId}` : "";
+    return api.get<ReviewAttemptRow[]>(`/review/attempts${qs}`).then(setRows);
   };
 
   useEffect(() => {
     if (user) load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, assessmentId]);
+
+  const filtered = useMemo(() => {
+    const query = q.trim().toLowerCase();
+    if (!query) return rows ?? [];
+    return (rows ?? []).filter(
+      (r) =>
+        r.candidate_name.toLowerCase().includes(query) ||
+        r.candidate_email.toLowerCase().includes(query) ||
+        r.assessment_title.toLowerCase().includes(query),
+    );
+  }, [rows, q]);
 
   const remove = async (r: ReviewAttemptRow) => {
     if (!confirm(`${r.candidate_name}의 '${r.assessment_title}' 응시 기록을 삭제할까요? 되돌릴 수 없습니다.`)) return;
@@ -39,14 +51,15 @@ function ReviewList() {
     <Shell user={user}>
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-xl font-bold">응시 리뷰</h1>
+        <SearchInput value={q} onChange={setQ} placeholder="응시자/시험 검색..." />
       </div>
       {!rows ? (
         <Spinner />
       ) : (
         <DataTable
-          rows={rows}
+          rows={filtered}
           rowKey={(r) => r.id}
-          empty="응시 기록이 없습니다."
+          empty={q ? "검색 결과가 없습니다." : "응시 기록이 없습니다."}
           columns={[
             {
               key: "candidate",

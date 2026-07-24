@@ -9,7 +9,7 @@ import { useUser } from "@/components/useUser";
 import { Shell } from "@/components/Shell";
 import { DataTable } from "@/components/DataTable";
 import { IconDelete, IconEdit } from "@/components/icons";
-import { Badge, Button, IconButton, Spinner } from "@/components/ui";
+import { Badge, Button, IconButton, SearchInput, Spinner } from "@/components/ui";
 
 const FILTERS = [
   { key: "all", label: "전체" },
@@ -22,6 +22,7 @@ export default function ProblemsPage() {
   const { user, loading } = useUser(["admin"]);
   const [problems, setProblems] = useState<ProblemSummary[] | null>(null);
   const [filter, setFilter] = useState("all");
+  const [q, setQ] = useState("");
 
   const load = () => api.get<ProblemSummary[]>("/problems").then(setProblems);
 
@@ -29,10 +30,14 @@ export default function ProblemsPage() {
     if (user) load();
   }, [user]);
 
-  const filtered = useMemo(
-    () => (problems ?? []).filter((p) => filter === "all" || p.difficulty === filter),
-    [problems, filter],
-  );
+  const filtered = useMemo(() => {
+    const query = q.trim().toLowerCase();
+    return (problems ?? []).filter(
+      (p) =>
+        (filter === "all" || p.difficulty === filter) &&
+        (!query || p.title.toLowerCase().includes(query)),
+    );
+  }, [problems, filter, q]);
 
   const remove = async (p: ProblemSummary) => {
     if (!confirm(`'${p.title}' 문제를 삭제(보관)할까요?`)) return;
@@ -46,9 +51,12 @@ export default function ProblemsPage() {
     <Shell user={user}>
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-xl font-bold">문제 관리</h1>
-        <Link href="/admin/problems/new">
-          <Button>+ 새 문제</Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <SearchInput value={q} onChange={setQ} placeholder="문제 제목 검색..." />
+          <Link href="/admin/problems/new">
+            <Button>+ 새 문제</Button>
+          </Link>
+        </div>
       </div>
 
       <div className="mb-4 flex flex-wrap gap-2">
@@ -80,7 +88,7 @@ export default function ProblemsPage() {
         <DataTable
           rows={filtered}
           rowKey={(p) => p.id}
-          empty={filter === "all" ? "등록된 문제가 없습니다." : "해당 난이도의 문제가 없습니다."}
+          empty={q ? "검색 결과가 없습니다." : filter === "all" ? "등록된 문제가 없습니다." : "해당 난이도의 문제가 없습니다."}
           columns={[
             {
               key: "title",

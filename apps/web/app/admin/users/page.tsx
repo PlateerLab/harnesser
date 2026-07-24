@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import type { Role, User } from "@/lib/types";
 import { fmtDateTime } from "@/lib/format";
@@ -8,7 +8,7 @@ import { useUser } from "@/components/useUser";
 import { Shell } from "@/components/Shell";
 import { DataTable } from "@/components/DataTable";
 import { IconDelete, IconEdit } from "@/components/icons";
-import { Badge, Button, Field, IconButton, inputCls, Modal, Spinner } from "@/components/ui";
+import { Badge, Button, Field, IconButton, inputCls, Modal, SearchInput, Spinner } from "@/components/ui";
 
 interface UserForm {
   email: string;
@@ -21,12 +21,21 @@ export default function UsersPage() {
   const { user, loading } = useUser(["admin"]);
   const [rows, setRows] = useState<User[] | null>(null);
   const [editing, setEditing] = useState<{ target: User | null } | null>(null);
+  const [q, setQ] = useState("");
 
   const load = () => api.get<User[]>("/admin/users").then(setRows);
 
   useEffect(() => {
     if (user) load();
   }, [user]);
+
+  const filtered = useMemo(() => {
+    const query = q.trim().toLowerCase();
+    if (!query) return rows ?? [];
+    return (rows ?? []).filter(
+      (u) => u.name.toLowerCase().includes(query) || u.email.toLowerCase().includes(query),
+    );
+  }, [rows, q]);
 
   const remove = async (target: User) => {
     if (!confirm(`${target.email} 계정을 삭제할까요? 응시 기록도 함께 삭제됩니다.`)) return;
@@ -40,16 +49,19 @@ export default function UsersPage() {
     <Shell user={user}>
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-xl font-bold">사용자 관리</h1>
-        <Button onClick={() => setEditing({ target: null })}>+ 사용자 추가</Button>
+        <div className="flex items-center gap-2">
+          <SearchInput value={q} onChange={setQ} placeholder="이름/이메일 검색..." />
+          <Button onClick={() => setEditing({ target: null })}>+ 사용자 추가</Button>
+        </div>
       </div>
 
       {!rows ? (
         <Spinner />
       ) : (
         <DataTable
-          rows={rows}
+          rows={filtered}
           rowKey={(u) => u.id}
-          empty="등록된 사용자가 없습니다."
+          empty={q ? "검색 결과가 없습니다." : "등록된 사용자가 없습니다."}
           columns={[
             { key: "name", header: "이름", render: (u) => <span className="font-medium">{u.name}</span> },
             { key: "email", header: "이메일", className: "text-slate-500", render: (u) => u.email },
