@@ -148,7 +148,7 @@ export function AuthoringChat({
   };
 
   return (
-    <div className="flex h-full flex-col rounded-xl border border-slate-200 bg-slate-900 text-slate-100">
+    <div className="flex h-full flex-col bg-slate-900 text-slate-100">
       {/* 헤더: 연결 상태 + 공급자 선택 */}
       <div className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-slate-700 px-3">
         <span className="flex min-w-0 items-center gap-2 text-sm font-semibold">
@@ -175,14 +175,32 @@ export function AuthoringChat({
       {/* 대화 */}
       <div ref={scrollRef} className="dark-scroll min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
         {items.length === 0 && (
-          <div className="pt-8 text-center text-sm text-slate-500">
-            문제 작성을 도와드립니다. 예:
-            <br />
-            <span className="text-xs text-slate-600">
-              “이분 탐색 medium 문제를 만들어줘” · “지문의 제한 조건을 더 엄밀하게” · “경계값 테스트 추가해줘”
-            </span>
-            <br />
-            <span className="mt-2 block text-xs text-slate-600">기본적으로 현재 열린 탭을 대상으로 작업합니다.</span>
+          <div className="flex h-full flex-col items-center justify-center gap-4 px-4 text-center">
+            <div>
+              <p className="text-sm font-semibold text-slate-300">문제 작성을 도와드립니다</p>
+              <p className="mt-1 text-xs text-slate-500">
+                초안을 직접 편집합니다. 기본적으로 현재 열린 탭을 대상으로 작업하며, 저장은 항상 직접 확인 후
+                누르시면 됩니다.
+              </p>
+            </div>
+            <div className="flex w-full flex-col gap-2">
+              {[
+                "이분 탐색을 활용하는 medium 난이도 문제를 처음부터 만들어줘",
+                "지문의 제한 조건을 더 엄밀하게 다듬어줘",
+                "경계값을 포함한 비공개 테스트 케이스를 5개 추가해줘",
+              ].map((s) => (
+                <button
+                  key={s}
+                  onClick={() => {
+                    setInput(s);
+                    inputRef.current?.focus();
+                  }}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-800/60 px-3 py-2.5 text-left text-xs text-slate-300 transition hover:border-violet-500/50 hover:bg-slate-800"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
           </div>
         )}
         {items.map((m, i) =>

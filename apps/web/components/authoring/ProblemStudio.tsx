@@ -1,10 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { LANGUAGES, type Problem, type TestCase } from "@/lib/types";
 import { CodeEditor } from "../CodeEditor";
+import { Divider } from "../Divider";
 import { Markdown } from "../Markdown";
 import { Button, Card, Field, inputCls } from "../ui";
 import { AuthoringChat } from "./AuthoringChat";
@@ -119,7 +121,31 @@ export function ProblemStudio({ initial, problemId }: { initial?: Problem; probl
   const [starterLang, setStarterLang] = useState(LANGUAGES[0].id);
   const [preview, setPreview] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [chatW, setChatW] = useState(420);
+  const mainRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    try {
+      const saved = Number(localStorage.getItem("harnesser:studio-chat-w"));
+      if (isFinite(saved) && saved >= 320 && saved <= 720) setChatW(saved);
+    } catch {
+      /* 기본값 유지 */
+    }
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.setItem("harnesser:studio-chat-w", String(chatW));
+    } catch {
+      /* 무시 */
+    }
+  }, [chatW]);
+
+  const onChatResize = (clientX: number) => {
+    const r = mainRef.current?.getBoundingClientRect();
+    if (!r) return;
+    setChatW(Math.min(720, Math.max(320, r.right - clientX)));
+  };
 
   // 도구 콜백은 렌더 사이클과 무관하게 항상 최신 상태를 봐야 한다
   const formRef = useRef(form);
@@ -258,213 +284,245 @@ export function ProblemStudio({ initial, problemId }: { initial?: Problem; probl
   };
 
   return (
-    <div className="flex gap-5">
-      {/* ── 좌: 문제 초안 패널 ── */}
-      <div className="min-w-0 flex-1">
-        <div className="mb-4 flex gap-1 border-b border-slate-200">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium ${
-                tab === t.key
-                  ? "border-slate-900 text-slate-900"
-                  : "border-transparent text-slate-400 hover:text-slate-600"
-              }`}
-            >
-              {t.label}
-              {t.key === "tests" && (
-                <span className="ml-1 text-xs text-slate-400">{form.test_cases.length}</span>
-              )}
-            </button>
-          ))}
+    <div className="flex h-screen flex-col bg-slate-50">
+      {/* 상단 고정 헤더 — 저장/삭제 상시 노출 */}
+      <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <Link
+            href="/admin/problems"
+            className="shrink-0 whitespace-nowrap rounded-lg px-2 py-1.5 text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+          >
+            ← 문제 목록
+          </Link>
+          <span className="h-5 w-px shrink-0 bg-slate-200" />
+          <span className="shrink-0 whitespace-nowrap text-sm font-bold">
+            {problemId ? "문제 편집" : "새 문제"}
+          </span>
+          {form.title && (
+            <span className="min-w-0 truncate text-sm text-slate-400">— {form.title}</span>
+          )}
         </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {problemId && (
+            <button
+              onClick={remove}
+              className="whitespace-nowrap rounded-lg px-3 py-1.5 text-sm text-red-500 hover:bg-red-50"
+            >
+              삭제
+            </button>
+          )}
+          <Button variant="secondary" onClick={() => router.push("/admin/problems")}>
+            취소
+          </Button>
+          <Button onClick={save} disabled={busy}>
+            {busy ? "저장 중..." : "저장"}
+          </Button>
+        </div>
+      </header>
 
-        {tab === "basic" && (
-          <Card className="space-y-4 p-6">
-            <Field label="제목">
-              <input className={inputCls} value={form.title} onChange={(e) => set("title", e.target.value)} />
-            </Field>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <Field label="난이도">
-                <select
-                  className={inputCls}
-                  value={form.difficulty}
-                  onChange={(e) => set("difficulty", e.target.value as Draft["difficulty"])}
-                >
-                  <option value="easy">쉬움</option>
-                  <option value="medium">보통</option>
-                  <option value="hard">어려움</option>
-                </select>
-              </Field>
-              <Field label="시간 제한 (ms)">
-                <input
-                  className={inputCls}
-                  type="number"
-                  value={form.time_limit_ms}
-                  onChange={(e) => set("time_limit_ms", Number(e.target.value))}
-                />
-              </Field>
-              <Field label="메모리 제한 (MB)">
-                <input
-                  className={inputCls}
-                  type="number"
-                  value={form.memory_limit_mb}
-                  onChange={(e) => set("memory_limit_mb", Number(e.target.value))}
-                />
-              </Field>
-            </div>
-          </Card>
-        )}
-
-        {tab === "statement" && (
-          <Card className="p-6">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-sm font-medium text-slate-700">지문 (Markdown)</span>
-              <button className="text-xs text-violet-600 hover:underline" onClick={() => setPreview((v) => !v)}>
-                {preview ? "편집" : "미리보기"}
-              </button>
-            </div>
-            {preview ? (
-              <div className="min-h-[420px] rounded-lg border border-slate-200 p-4">
-                <Markdown>{form.statement_md}</Markdown>
-              </div>
-            ) : (
-              <textarea
-                className={`${inputCls} min-h-[420px] font-mono text-[13px] leading-relaxed`}
-                value={form.statement_md}
-                onChange={(e) => set("statement_md", e.target.value)}
-              />
-            )}
-          </Card>
-        )}
-
-        {tab === "starter" && (
-          <Card className="p-6">
-            <div className="mb-3 flex items-center justify-between">
-              <span className="text-sm font-medium text-slate-700">언어별 시작 코드 (선택)</span>
-              <div className="flex gap-1">
-                {LANGUAGES.map((l) => (
-                  <button
-                    key={l.id}
-                    onClick={() => setStarterLang(l.id)}
-                    className={`whitespace-nowrap rounded-lg px-3 py-1 text-xs font-medium ${
-                      starterLang === l.id ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"
-                    }`}
-                  >
-                    {l.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="h-[420px] overflow-hidden rounded-lg border border-slate-200">
-              <CodeEditor
-                language={starterLang}
-                value={form.starter_code[starterLang] ?? ""}
-                onChange={(code) => set("starter_code", { ...form.starter_code, [starterLang]: code })}
-                theme="light"
-              />
-            </div>
-          </Card>
-        )}
-
-        {tab === "tests" && (
-          <Card className="p-6">
-            <div className="mb-3 flex items-center justify-between">
-              <span className="text-sm font-medium text-slate-700">
-                공개 예시는 응시자에게 보이고, 비공개는 채점에만 사용됩니다.
-              </span>
-              <Button
-                variant="secondary"
-                onClick={() =>
-                  set("test_cases", [
-                    ...form.test_cases,
-                    { input: "", expected_output: "", is_sample: false, weight: 1 },
-                  ])
-                }
+      {/* 본문: 좌 초안 패널 | 우 에이전트 패널 (항상 표시, 드래그 리사이즈) */}
+      <div ref={mainRef} className="flex min-h-0 flex-1">
+        <div className="flex min-w-[440px] flex-1 flex-col">
+          <div className="flex shrink-0 gap-1 border-b border-slate-200 bg-white px-6">
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={`whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+                  tab === t.key
+                    ? "border-slate-900 text-slate-900"
+                    : "border-transparent text-slate-400 hover:text-slate-600"
+                }`}
               >
-                + 추가
-              </Button>
-            </div>
-            <div className="space-y-4">
-              {form.test_cases.map((tc, i) => (
-                <div key={i} className="rounded-lg border border-slate-200 p-4">
+                {t.label}
+                {t.key === "tests" && (
+                  <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-500">
+                    {form.test_cases.length}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+            <div className="mx-auto max-w-3xl">
+              {tab === "basic" && (
+                <Card className="space-y-4 p-6">
+                  <Field label="제목">
+                    <input
+                      className={inputCls}
+                      value={form.title}
+                      onChange={(e) => set("title", e.target.value)}
+                      placeholder="예: 가장 긴 증가하는 부분 수열"
+                    />
+                  </Field>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <Field label="난이도">
+                      <select
+                        className={inputCls}
+                        value={form.difficulty}
+                        onChange={(e) => set("difficulty", e.target.value as Draft["difficulty"])}
+                      >
+                        <option value="easy">쉬움</option>
+                        <option value="medium">보통</option>
+                        <option value="hard">어려움</option>
+                      </select>
+                    </Field>
+                    <Field label="시간 제한 (ms)" hint="언어별 보정 계수가 곱해집니다">
+                      <input
+                        className={inputCls}
+                        type="number"
+                        value={form.time_limit_ms}
+                        onChange={(e) => set("time_limit_ms", Number(e.target.value))}
+                      />
+                    </Field>
+                    <Field label="메모리 제한 (MB)">
+                      <input
+                        className={inputCls}
+                        type="number"
+                        value={form.memory_limit_mb}
+                        onChange={(e) => set("memory_limit_mb", Number(e.target.value))}
+                      />
+                    </Field>
+                  </div>
+                </Card>
+              )}
+
+              {tab === "statement" && (
+                <Card className="p-6">
                   <div className="mb-2 flex items-center justify-between">
-                    <div className="flex items-center gap-4 text-sm">
-                      <span className="font-semibold">#{i + 1}</span>
-                      <label className="flex items-center gap-1.5">
-                        <input
-                          type="checkbox"
-                          checked={tc.is_sample}
-                          onChange={(e) => setTc(i, { is_sample: e.target.checked })}
-                        />
-                        예시 공개
-                      </label>
-                      <label className="flex items-center gap-1.5">
-                        가중치
-                        <input
-                          className="w-16 rounded border border-slate-300 px-2 py-0.5"
-                          type="number"
-                          min={1}
-                          value={tc.weight}
-                          onChange={(e) => setTc(i, { weight: Number(e.target.value) })}
-                        />
-                      </label>
-                    </div>
+                    <span className="text-sm font-medium text-slate-700">지문 (Markdown)</span>
                     <button
-                      className="text-xs text-red-500 hover:underline"
-                      onClick={() => set("test_cases", form.test_cases.filter((_, j) => j !== i))}
+                      className="text-xs font-medium text-violet-600 hover:underline"
+                      onClick={() => setPreview((v) => !v)}
                     >
-                      삭제
+                      {preview ? "편집" : "미리보기"}
                     </button>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field label="입력">
-                      <textarea
-                        className={`${inputCls} min-h-20 font-mono text-xs`}
-                        value={tc.input}
-                        onChange={(e) => setTc(i, { input: e.target.value })}
-                      />
-                    </Field>
-                    <Field label="기대 출력">
-                      <textarea
-                        className={`${inputCls} min-h-20 font-mono text-xs`}
-                        value={tc.expected_output}
-                        onChange={(e) => setTc(i, { expected_output: e.target.value })}
-                      />
-                    </Field>
+                  {preview ? (
+                    <div className="min-h-[460px] rounded-lg border border-slate-200 p-5">
+                      <Markdown>{form.statement_md}</Markdown>
+                    </div>
+                  ) : (
+                    <textarea
+                      className={`${inputCls} min-h-[460px] font-mono text-[13px] leading-relaxed`}
+                      value={form.statement_md}
+                      onChange={(e) => set("statement_md", e.target.value)}
+                    />
+                  )}
+                </Card>
+              )}
+
+              {tab === "starter" && (
+                <Card className="p-6">
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="text-sm font-medium text-slate-700">언어별 시작 코드 (선택)</span>
+                    <div className="flex gap-1">
+                      {LANGUAGES.map((l) => (
+                        <button
+                          key={l.id}
+                          onClick={() => setStarterLang(l.id)}
+                          className={`whitespace-nowrap rounded-lg px-3 py-1 text-xs font-medium ${
+                            starterLang === l.id ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          {l.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
+                  <div className="h-[460px] overflow-hidden rounded-lg border border-slate-200">
+                    <CodeEditor
+                      language={starterLang}
+                      value={form.starter_code[starterLang] ?? ""}
+                      onChange={(code) => set("starter_code", { ...form.starter_code, [starterLang]: code })}
+                      theme="light"
+                    />
+                  </div>
+                </Card>
+              )}
+
+              {tab === "tests" && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-500">
+                      공개 예시는 응시자에게 보이고, 비공개는 채점에만 사용됩니다.
+                    </span>
+                    <Button
+                      variant="secondary"
+                      onClick={() =>
+                        set("test_cases", [
+                          ...form.test_cases,
+                          { input: "", expected_output: "", is_sample: false, weight: 1 },
+                        ])
+                      }
+                    >
+                      + 추가
+                    </Button>
+                  </div>
+                  {form.test_cases.map((tc, i) => (
+                    <Card key={i} className="p-4">
+                      <div className="mb-2 flex items-center justify-between">
+                        <div className="flex items-center gap-4 text-sm">
+                          <span className="font-semibold">#{i + 1}</span>
+                          <label className="flex items-center gap-1.5">
+                            <input
+                              type="checkbox"
+                              checked={tc.is_sample}
+                              onChange={(e) => setTc(i, { is_sample: e.target.checked })}
+                            />
+                            예시 공개
+                          </label>
+                          <label className="flex items-center gap-1.5">
+                            가중치
+                            <input
+                              className="w-16 rounded border border-slate-300 px-2 py-0.5"
+                              type="number"
+                              min={1}
+                              value={tc.weight}
+                              onChange={(e) => setTc(i, { weight: Number(e.target.value) })}
+                            />
+                          </label>
+                        </div>
+                        <button
+                          className="text-xs text-red-500 hover:underline"
+                          onClick={() => set("test_cases", form.test_cases.filter((_, j) => j !== i))}
+                        >
+                          삭제
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <Field label="입력">
+                          <textarea
+                            className={`${inputCls} min-h-20 font-mono text-xs`}
+                            value={tc.input}
+                            onChange={(e) => setTc(i, { input: e.target.value })}
+                          />
+                        </Field>
+                        <Field label="기대 출력">
+                          <textarea
+                            className={`${inputCls} min-h-20 font-mono text-xs`}
+                            value={tc.expected_output}
+                            onChange={(e) => setTc(i, { expected_output: e.target.value })}
+                          />
+                        </Field>
+                      </div>
+                    </Card>
+                  ))}
+                  {form.test_cases.length === 0 && (
+                    <Card>
+                      <p className="py-8 text-center text-sm text-slate-400">테스트 케이스를 추가하세요.</p>
+                    </Card>
+                  )}
                 </div>
-              ))}
-              {form.test_cases.length === 0 && (
-                <p className="py-6 text-center text-sm text-slate-400">테스트 케이스를 추가하세요.</p>
               )}
             </div>
-          </Card>
-        )}
-
-        <div className="mt-5 flex justify-between">
-          {problemId ? (
-            <Button variant="danger" onClick={remove}>
-              문제 삭제
-            </Button>
-          ) : (
-            <span />
-          )}
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={() => router.push("/admin/problems")}>
-              취소
-            </Button>
-            <Button onClick={save} disabled={busy}>
-              {busy ? "저장 중..." : "저장"}
-            </Button>
           </div>
         </div>
-      </div>
 
-      {/* ── 우: LLM 패널 ── */}
-      <div className="hidden w-[400px] shrink-0 lg:block">
-        <div className="sticky top-20 h-[calc(100vh-6.5rem)]">
+        <Divider orientation="vertical" onMove={onChatResize} />
+
+        <div style={{ width: chatW }} className="min-w-[320px] shrink-0">
           <AuthoringChat getContext={getContext} applyTool={applyTool} />
         </div>
       </div>
