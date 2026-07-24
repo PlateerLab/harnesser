@@ -4,20 +4,20 @@ import { useMemo, useState } from "react";
 import type { EventRow } from "@/lib/types";
 import { EVENT_LABEL, fmtOffset } from "@/lib/format";
 
-const TYPE_STYLE: Record<string, { icon: string; color: string }> = {
-  attempt_started: { icon: "🏁", color: "text-blue-600" },
-  attempt_finished: { icon: "🏆", color: "text-emerald-600" },
-  attempt_expired: { icon: "⌛", color: "text-slate-500" },
-  code_snapshot: { icon: "📷", color: "text-slate-500" },
-  paste: { icon: "📋", color: "text-red-600" },
-  focus_lost: { icon: "🚪", color: "text-amber-600" },
-  focus_gained: { icon: "↩️", color: "text-slate-400" },
-  run_requested: { icon: "▶️", color: "text-blue-600" },
-  submit_requested: { icon: "📤", color: "text-violet-600" },
-  run_result: { icon: "🧪", color: "text-blue-600" },
-  submit_result: { icon: "✅", color: "text-violet-600" },
-  ai_message: { icon: "🤖", color: "text-violet-600" },
-  language_change: { icon: "🔤", color: "text-slate-500" },
+const TYPE_COLOR: Record<string, string> = {
+  attempt_started: "text-blue-600",
+  attempt_finished: "text-emerald-600",
+  attempt_expired: "text-slate-500",
+  code_snapshot: "text-slate-500",
+  paste: "text-red-600",
+  focus_lost: "text-amber-600",
+  focus_gained: "text-slate-400",
+  run_requested: "text-blue-600",
+  submit_requested: "text-violet-600",
+  run_result: "text-blue-600",
+  submit_result: "text-violet-600",
+  ai_message: "text-violet-600",
+  language_change: "text-slate-500",
 };
 
 const FILTERS: { key: string; label: string; types: string[] }[] = [
@@ -68,7 +68,7 @@ export function Timeline({
       </div>
       <div className="space-y-0.5">
         {filtered.map((e) => {
-          const style = TYPE_STYLE[e.type] || { icon: "•", color: "text-slate-500" };
+          const color = TYPE_COLOR[e.type] || "text-slate-500";
           const detail = describe(e);
           const expandable = e.type === "paste" && !!e.payload.text;
           return (
@@ -82,8 +82,7 @@ export function Timeline({
                 <span className="w-20 shrink-0 font-mono text-xs text-slate-400">
                   {fmtOffset(startIso, e.created_at)}
                 </span>
-                <span className="shrink-0">{style.icon}</span>
-                <span className={`shrink-0 font-medium ${style.color}`}>
+                <span className={`shrink-0 font-medium ${color}`}>
                   {EVENT_LABEL[e.type] || e.type}
                 </span>
                 {e.problem_id && (

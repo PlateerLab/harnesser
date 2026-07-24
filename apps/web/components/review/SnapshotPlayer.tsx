@@ -74,7 +74,7 @@ export function SnapshotPlayer({
           onClick={() => setPlaying((v) => !v)}
           className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white"
         >
-          {playing ? "⏸ 정지" : "▶ 재생"}
+          {playing ? "정지" : "재생"}
         </button>
         <input
           type="range"

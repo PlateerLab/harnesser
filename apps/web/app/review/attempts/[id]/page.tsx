@@ -393,7 +393,7 @@ function ExecutionsTab({
             <span className="text-slate-500">{ex.language}</span>
             {ex.verdict && <Badge value={ex.verdict} label={VERDICT_LABEL[ex.verdict]} />}
             {ex.score != null && <span className="font-bold">{ex.score}점</span>}
-            <span className="ml-auto text-xs text-slate-400">{openId === ex.id ? "접기 ▲" : "코드/결과 보기 ▼"}</span>
+            <span className="ml-auto text-xs text-slate-400">{openId === ex.id ? "접기" : "코드/결과 보기"}</span>
           </div>
           {openId === ex.id && (
             <div className="mt-4 space-y-3">

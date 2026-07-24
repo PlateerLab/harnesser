@@ -81,7 +81,7 @@ function ReviewList() {
                   <td className="px-4 py-3 text-xs text-slate-500">
                     이벤트 {r.event_count}
                     {r.ai_message_count > 0 && ` · AI ${r.ai_message_count}턴`}
-                    {r.has_auto_eval && " · 자동평가 ✓"}
+                    {r.has_auto_eval && " · 자동평가 완료"}
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-500">{fmtDateTime(r.started_at)}</td>
                   <td className="px-4 py-3 text-right">
