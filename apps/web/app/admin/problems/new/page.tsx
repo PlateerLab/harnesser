@@ -2,7 +2,7 @@
 
 import { useUser } from "@/components/useUser";
 import { Shell } from "@/components/Shell";
-import { ProblemForm } from "@/components/ProblemForm";
+import { ProblemStudio } from "@/components/authoring/ProblemStudio";
 import { Spinner } from "@/components/ui";
 
 export default function NewProblemPage() {
@@ -11,7 +11,7 @@ export default function NewProblemPage() {
   return (
     <Shell user={user}>
       <h1 className="mb-6 text-xl font-bold">새 문제</h1>
-      <ProblemForm />
+      <ProblemStudio />
     </Shell>
   );
 }

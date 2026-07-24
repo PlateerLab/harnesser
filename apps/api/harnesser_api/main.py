@@ -11,6 +11,7 @@ from .routers import (
     ai,
     ai_ws,
     assessments,
+    authoring_ws,
     attempts,
     auth,
     executions,
@@ -54,7 +55,7 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
 
 
-app = FastAPI(title="Harnesser API", version="0.6.0", lifespan=lifespan)
+app = FastAPI(title="Harnesser API", version="0.7.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -72,6 +73,7 @@ app.include_router(attempts.router)
 app.include_router(executions.router)
 app.include_router(ai.router)
 app.include_router(ai_ws.router)
+app.include_router(authoring_ws.router)
 app.include_router(review.router)
 app.include_router(settings_router.router)
 app.include_router(internal.router)

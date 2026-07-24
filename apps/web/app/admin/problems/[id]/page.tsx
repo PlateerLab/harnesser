@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import type { Problem } from "@/lib/types";
 import { useUser } from "@/components/useUser";
 import { Shell } from "@/components/Shell";
-import { ProblemForm } from "@/components/ProblemForm";
+import { ProblemStudio } from "@/components/authoring/ProblemStudio";
 import { Spinner } from "@/components/ui";
 
 export default function EditProblemPage({ params }: { params: Promise<{ id: string }> }) {
@@ -21,7 +21,7 @@ export default function EditProblemPage({ params }: { params: Promise<{ id: stri
   return (
     <Shell user={user}>
       <h1 className="mb-6 text-xl font-bold">문제 편집</h1>
-      <ProblemForm initial={problem} problemId={id} />
+      <ProblemStudio initial={problem} problemId={id} />
     </Shell>
   );
 }

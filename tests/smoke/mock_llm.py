@@ -74,11 +74,38 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(b"data: [DONE]\n\n")
             self.wfile.flush()
         else:
-            self._json({
-                "id": "chatcmpl-mock", "object": "chat.completion", "created": now, "model": model,
-                "choices": [{"index": 0, "message": {"role": "assistant", "content": REPLY}, "finish_reason": "stop"}],
-                "usage": {"prompt_tokens": 10, "completion_tokens": 8, "total_tokens": 18},
-            })
+            # 도구 시나리오 (authoring 에이전트 루프 테스트용)
+            msgs = req.get("messages", [])
+            last_user = next((m for m in reversed(msgs) if m.get("role") == "user"), {})
+            last_text = str(last_user.get("content", ""))
+            if req.get("tools"):
+                last = msgs[-1] if msgs else {}
+                if last.get("role") == "tool":
+                    return self._json(
+                        self._text_resp(model, now, "도구 결과 확인: " + str(last.get("content", ""))[:80])
+                    )
+                if "검증테스트" in last_text:
+                    return self._json(self._tool_resp(model, now, {"statement_md": 123}))
+                if "도구테스트" in last_text:
+                    return self._json(self._tool_resp(model, now, {"statement_md": "## 문제\n\n모의 지문입니다."}))
+            self._json(self._text_resp(model, now, REPLY))
+
+    def _text_resp(self, model, now, text):
+        return {
+            "id": "chatcmpl-mock", "object": "chat.completion", "created": now, "model": model,
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": text}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 8, "total_tokens": 18},
+        }
+
+    def _tool_resp(self, model, now, args):
+        return {
+            "id": "chatcmpl-mock", "object": "chat.completion", "created": now, "model": model,
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": None, "tool_calls": [
+                {"id": "call_mock_1", "type": "function",
+                 "function": {"name": "update_statement", "arguments": json.dumps(args, ensure_ascii=False)}}
+            ]}, "finish_reason": "tool_calls"}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 8, "total_tokens": 18},
+        }
 
 
 if __name__ == "__main__":
