@@ -345,7 +345,7 @@ export function ProblemStudio({ initial, problemId }: { initial?: Problem; probl
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
-            <div className="mx-auto max-w-3xl">
+            <div>
               {tab === "basic" && (
                 <Card className="space-y-4 p-6">
                   <Field label="제목">
