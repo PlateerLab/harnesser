@@ -94,7 +94,15 @@ async def ai_ws(ws: WebSocket, attempt_id: uuid.UUID):
 
     await ws.accept()
     out = Envelope(ws)
-    await out.send({"type": "ready", **(await _usage_snapshot(attempt_id, assessment))})
+    active_now = chat_service.active_turn(attempt_id)
+    await out.send(
+        {
+            "type": "ready",
+            **(await _usage_snapshot(attempt_id, assessment)),
+            # 클라이언트 재접속 동기화용 — 진행 중 턴이 없으면 대기 상태를 해제한다
+            "active_req_id": active_now.req_id if active_now and not active_now.done else None,
+        }
+    )
 
     pump_task: asyncio.Task | None = None
     subscribed: tuple[chat_service.TurnHandle, asyncio.Queue] | None = None

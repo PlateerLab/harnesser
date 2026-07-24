@@ -39,30 +39,57 @@ export function AiChat({ attemptId, problemId }: { attemptId: string; problemId:
   const configured = usage === null ? null : usage.configured !== false;
   const exhausted = usage !== null && usage.remaining <= 0;
 
+  // 현재 턴의 누적 텍스트 — 말풍선 재구성(리플레이/탭 복귀)에도 유실이 없도록 단일 출처로 유지
+  const streamTextRef = useRef("");
+
   const refreshUsage = useCallback(() => {
     api.get<AiUsage>(`/attempts/${attemptId}/ai/usage`).then(setUsage).catch(() => {});
   }, [attemptId]);
 
-  const loadMessages = useCallback(() => {
-    api
-      .get<AiMessage[]>(`/attempts/${attemptId}/ai/messages?problem_id=${problemIdRef.current}`)
-      .then((rows) =>
-        setMessages(rows.map((m) => ({ role: m.role, content: m.content, problemId: m.problem_id }))),
-      )
-      .catch(() => {});
-  }, [attemptId]);
+  const streamingVisible = useCallback(
+    () =>
+      streamReqRef.current !== null &&
+      (!streamProblemRef.current || streamProblemRef.current === problemIdRef.current),
+    [],
+  );
 
-  // 스트리밍 중인 어시스턴트 말풍선에 델타 반영 (현재 문제 스레드일 때만 표시)
-  const appendDelta = useCallback((reqId: string, text: string) => {
-    if (streamReqRef.current !== reqId) return;
-    if (streamProblemRef.current && streamProblemRef.current !== problemIdRef.current) return;
-    setMessages((prev) => {
-      const next = [...prev];
-      const last = next[next.length - 1];
-      if (last?.streaming) next[next.length - 1] = { ...last, content: last.content + text };
-      return next;
-    });
-  }, []);
+  /** 서버 메시지 목록으로 동기화. 진행 중 턴이 보이는 스레드면 누적 텍스트로 말풍선을 복원한다. */
+  const loadMessages = useCallback(() => {
+    return api
+      .get<AiMessage[]>(`/attempts/${attemptId}/ai/messages?problem_id=${problemIdRef.current}`)
+      .then((rows) => {
+        const base: ChatMessage[] = rows.map((m) => ({
+          role: m.role,
+          content: m.content,
+          problemId: m.problem_id,
+        }));
+        if (streamingVisible()) {
+          base.push({ role: "assistant", content: streamTextRef.current, streaming: true });
+        }
+        setMessages(base);
+      })
+      .catch(() => {});
+  }, [attemptId, streamingVisible]);
+
+  // 델타 반영 — 누적 ref가 진실이며, 말풍선은 누적값으로 덮어써 순서 레이스에 안전
+  const appendDelta = useCallback(
+    (reqId: string, text: string) => {
+      if (streamReqRef.current !== reqId) return;
+      streamTextRef.current += text;
+      if (!streamingVisible()) return;
+      setMessages((prev) => {
+        const next = [...prev];
+        const last = next[next.length - 1];
+        if (last?.streaming) {
+          next[next.length - 1] = { ...last, content: streamTextRef.current };
+          return next;
+        }
+        // 말풍선이 없으면(동기화 레이스) 새로 만든다
+        return [...next, { role: "assistant", content: streamTextRef.current, streaming: true }];
+      });
+    },
+    [streamingVisible],
+  );
 
   const finalizeStream = useCallback(
     (error?: string | null, cancelled?: boolean) => {
@@ -79,6 +106,7 @@ export function AiChat({ attemptId, problemId }: { attemptId: string; problemId:
       });
       streamReqRef.current = null;
       streamProblemRef.current = null;
+      streamTextRef.current = "";
       setBusy(false);
     },
     [],
@@ -101,9 +129,11 @@ export function AiChat({ attemptId, problemId }: { attemptId: string; problemId:
       wsRef.current = ws;
 
       ws.onopen = () => {
+        const wasReconnect = failuresRef.current > 0;
         failuresRef.current = 0;
         lastAliveRef.current = Date.now();
         setConn("online");
+        if (wasReconnect) loadMessages(); // 끊긴 사이 놓친 턴 완료분 동기화
       };
 
       ws.onmessage = (raw) => {
@@ -124,17 +154,24 @@ export function AiChat({ attemptId, problemId }: { attemptId: string; problemId:
               model: (ev.model as string) ?? null,
               provider: (ev.provider as string) ?? null,
             });
+            // 진행 중 턴이 없는데 대기 상태라면(끊긴 사이 턴 종료) 잠금 해제 + 동기화
+            if (!ev.active_req_id && streamReqRef.current) {
+              finalizeStream();
+              loadMessages();
+            }
             break;
           }
           case "turn_start": {
             streamReqRef.current = ev.req_id as string;
             streamProblemRef.current = (ev.problem_id as string) ?? null;
+            if (!ev.replay) streamTextRef.current = ""; // 리플레이는 델타로 누적을 다시 채운다
             setBusy(true);
             if (ev.replay) {
-              // 재접속 리플레이 — 메시지 목록을 동기화한 뒤 스트리밍 말풍선 준비
+              // 재접속 리플레이 — 서버 목록과 동기화하면 loadMessages가
+              // 누적 텍스트로 스트리밍 말풍선까지 복원한다 (레이스 없음)
+              streamTextRef.current = "";
               loadMessages();
-            }
-            if (!streamProblemRef.current || streamProblemRef.current === problemIdRef.current) {
+            } else if (!streamProblemRef.current || streamProblemRef.current === problemIdRef.current) {
               setMessages((prev) =>
                 prev[prev.length - 1]?.streaming
                   ? prev
@@ -242,6 +279,7 @@ export function AiChat({ attemptId, problemId }: { attemptId: string; problemId:
     setMessages((prev) => [...prev, { role: "assistant", content: "", streaming: true }]);
     streamReqRef.current = "sse";
     streamProblemRef.current = problemId;
+    streamTextRef.current = "";
     await streamAiChat(
       attemptId,
       { problem_id: problemId, content },
