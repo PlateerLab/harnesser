@@ -93,7 +93,6 @@ export default function BulkAddUsersPage() {
   const [grid, setGrid] = useState<string[][] | null>(null);
   const [colMap, setColMap] = useState<ColField[]>([]);
   const [hasHeader, setHasHeader] = useState(true);
-  const [pasteText, setPasteText] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const validRows = useMemo(
@@ -123,13 +122,6 @@ export default function BulkAddUsersPage() {
     loadGrid(g as unknown as string[][]);
   };
 
-  const onPaste = () => {
-    const lines = pasteText.replace(/\r/g, "").split("\n").filter((l) => l.trim());
-    if (lines.length === 0) return alert("붙여넣은 내용이 없습니다");
-    const sep = lines[0].includes("\t") ? "\t" : ",";
-    loadGrid(lines.map((l) => l.split(sep)));
-  };
-
   const importGrid = () => {
     if (!grid) return;
     if (!colMap.includes("email")) return alert("이메일 컬럼을 지정하세요");
@@ -154,7 +146,6 @@ export default function BulkAddUsersPage() {
     if (imported.length === 0) return alert("가져올 유효한 행이 없습니다");
     setRows((prev) => [...prev.filter((r) => r.email.trim() || r.name.trim()), ...imported]);
     setGrid(null);
-    setPasteText("");
     if (fileRef.current) fileRef.current.value = "";
     if (skipped > 0) alert(`이메일이 없는 ${skipped}개 행은 건너뛰었습니다`);
   };
@@ -283,31 +274,28 @@ export default function BulkAddUsersPage() {
       <Card className="mb-6 p-6">
         <h2 className="text-sm font-bold text-slate-800">파일에서 가져오기</h2>
         <p className="mt-0.5 text-xs text-slate-400">
-          Excel(.xlsx)·CSV 파일을 올리거나, 엑셀에서 복사한 표를 붙여넣으세요. 이름/이메일/역할 컬럼은 자동
-          인식되며 아래에서 직접 지정할 수도 있습니다.
+          Excel(.xlsx)·CSV 파일을 올리면 이름/이메일/역할 컬럼을 자동 인식합니다. 인식 결과는 아래에서 직접
+          지정할 수도 있습니다.
         </p>
-        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div>
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              className="block w-full text-sm text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-slate-700"
-              onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
-            />
-          </div>
-          <div className="flex gap-2">
-            <textarea
-              className={`${inputCls} min-h-16 font-mono text-xs`}
-              placeholder={"엑셀 표 붙여넣기 (탭/쉼표 구분)\n홍길동\thong@example.com\t응시자"}
-              value={pasteText}
-              onChange={(e) => setPasteText(e.target.value)}
-            />
-            <Button variant="secondary" className="shrink-0 self-start" onClick={onPaste}>
-              분석
-            </Button>
-          </div>
-        </div>
+        <label
+          className="mt-4 flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-slate-300 px-6 py-8 text-center transition hover:border-violet-400 hover:bg-violet-50/30"
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            const f = e.dataTransfer.files?.[0];
+            if (f) onFile(f);
+          }}
+        >
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            className="hidden"
+            onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
+          />
+          <span className="text-sm font-medium text-slate-600">파일을 끌어다 놓거나 클릭해서 선택</span>
+          <span className="text-xs text-slate-400">.xlsx · .xls · .csv (예상 컬럼: 이름, 이메일, 역할, 비밀번호)</span>
+        </label>
 
         {/* 컬럼 매핑 + 미리보기 */}
         {grid && (
