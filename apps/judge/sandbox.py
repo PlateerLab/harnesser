@@ -10,7 +10,7 @@ import resource
 import signal
 import subprocess
 
-OUTPUT_LIMIT = 64 * 1024  # stdout 보존 상한
+OUTPUT_LIMIT = 4 * 1024 * 1024  # stdout 보존 상한 (대형 출력 정답 보호)
 STDERR_LIMIT = 8 * 1024
 
 try:
