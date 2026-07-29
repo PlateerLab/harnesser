@@ -37,6 +37,19 @@ class UserCreate(BaseModel):
     role: Role = "candidate"
 
 
+class BulkUserRow(BaseModel):
+    email: EmailStr
+    name: str = Field(min_length=1, max_length=100)
+    role: Role = "candidate"
+    password: str | None = Field(default=None, min_length=6, max_length=100)
+
+
+class BulkUsersIn(BaseModel):
+    users: list[BulkUserRow] = Field(min_length=1, max_length=500)
+    # 행에 비밀번호가 없을 때 사용할 공통 비밀번호. 이것도 없으면 행별 랜덤 생성 후 응답에 포함.
+    default_password: str | None = Field(default=None, min_length=6, max_length=100)
+
+
 class UserUpdate(BaseModel):
     name: str | None = None
     password: str | None = Field(default=None, min_length=6)

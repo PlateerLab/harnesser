@@ -1,3 +1,4 @@
+import secrets
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -7,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import get_db
 from ..deps import require_admin, require_staff
 from ..models import User
-from ..schemas import UserCreate, UserOut, UserUpdate
+from ..schemas import BulkUsersIn, UserCreate, UserOut, UserUpdate
 from ..security import hash_password
 
 router = APIRouter(prefix="/admin/users", tags=["users"])
@@ -32,6 +33,34 @@ async def create_user(body: UserCreate, db: AsyncSession = Depends(get_db), _=De
     await db.commit()
     await db.refresh(user)
     return user
+
+
+@router.post("/bulk")
+async def bulk_create_users(body: BulkUsersIn, db: AsyncSession = Depends(get_db), _=Depends(require_admin)):
+    """다중 사용자 등록 — 행별 성공/실패를 개별 보고한다 (전체 롤백 없음).
+
+    비밀번호 우선순위: 행 지정 > 공통(default_password) > 랜덤 생성(응답에 포함).
+    """
+    existing = {e for e in (await db.execute(select(User.email))).scalars()}
+    results: list[dict] = []
+    created = 0
+    for row in body.users:
+        email = row.email.lower()
+        if email in existing:
+            results.append({"email": email, "name": row.name, "ok": False, "error": "이미 존재하는 이메일"})
+            continue
+        password = row.password or body.default_password
+        generated = None
+        if not password:
+            password = generated = secrets.token_urlsafe(6)
+        db.add(User(email=email, name=row.name, password_hash=hash_password(password), role=row.role))
+        existing.add(email)
+        created += 1
+        results.append(
+            {"email": email, "name": row.name, "ok": True, "generated_password": generated}
+        )
+    await db.commit()
+    return {"created": created, "failed": len(results) - created, "results": results}
 
 
 @router.patch("/{user_id}", response_model=UserOut)

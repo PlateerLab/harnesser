@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import type { Role, User } from "@/lib/types";
 import { fmtDateTime } from "@/lib/format";
@@ -51,7 +52,9 @@ export default function UsersPage() {
         <h1 className="text-xl font-bold">사용자 관리</h1>
         <div className="flex items-center gap-2">
           <SearchInput value={q} onChange={setQ} placeholder="이름/이메일 검색..." />
-          <Button onClick={() => setEditing({ target: null })}>+ 사용자 추가</Button>
+          <Link href="/admin/users/new">
+            <Button>+ 사용자 추가</Button>
+          </Link>
         </div>
       </div>
 
