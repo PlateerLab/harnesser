@@ -15,7 +15,7 @@ export default function DashboardPage() {
   const [assignments, setAssignments] = useState<MyAssignment[] | null>(null);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
-  const { toast } = useToast();
+  const { toast, confirm } = useToast();
   const router = useRouter();
 
   const isStaff = user?.role === "admin" || user?.role === "evaluator";
@@ -35,6 +35,20 @@ export default function DashboardPage() {
       router.push(`/attempts/${attempt.id}`);
     } catch (e) {
       toast(e instanceof ApiError ? e.message : "시작할 수 없습니다", "error");
+      setBusyId(null);
+    }
+  };
+
+  // 관리자 전용 — 응시자 흐름과 분리된 재응시(체험)
+  const retake = async (a: MyAssignment) => {
+    if (!a.attempt_id) return;
+    if (!(await confirm({ title: "다시 응시할까요?", message: "관리자 체험용 재응시입니다.", confirmLabel: "다시 응시" }))) return;
+    setBusyId(a.assessment_id);
+    try {
+      const attempt = await api.post<Attempt>(`/attempts/${a.attempt_id}/retake`);
+      router.push(`/attempts/${attempt.id}`);
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : "다시 응시할 수 없습니다", "error");
       setBusyId(null);
     }
   };
@@ -107,6 +121,16 @@ export default function DashboardPage() {
                       <Button onClick={() => start(a.assessment_id)} disabled={busy}>
                         {busy ? "준비 중..." : "응시 시작"}
                       </Button>
+                    )}
+                    {/* 관리자 전용 — 응시자에게는 보이지 않는 체험/재응시 액션 */}
+                    {isStaff && finished && (
+                      <button
+                        onClick={() => retake(a)}
+                        disabled={busy}
+                        className="whitespace-nowrap rounded-lg border border-dashed border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 transition hover:bg-amber-100 disabled:opacity-50"
+                      >
+                        {busy ? "시작 중..." : "관리자: 재응시"}
+                      </button>
                     )}
                   </div>
                 </div>
