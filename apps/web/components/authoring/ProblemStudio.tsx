@@ -4,22 +4,64 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
-import { LANGUAGES, type Problem, type TestCase } from "@/lib/types";
+import {
+  LANGUAGES,
+  type CriterionItem,
+  type Problem,
+  type ReferenceFile,
+  type ReferenceKind,
+  type TestCase,
+} from "@/lib/types";
 import { CodeEditor } from "../CodeEditor";
 import { Divider } from "../Divider";
 import { Markdown } from "../Markdown";
 import { Button, Card, Field, inputCls } from "../ui";
 import { useToast } from "../toast";
+import { Explorer } from "../reference/Explorer";
+import { Viewer } from "../reference/Viewer";
 import { AuthoringChat } from "./AuthoringChat";
 
-type TabKey = "basic" | "statement" | "starter" | "tests";
+type TabKey = "basic" | "statement" | "reference" | "grading" | "starter" | "tests";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "basic", label: "기본 정보" },
   { key: "statement", label: "문제" },
+  { key: "reference", label: "참고 자료" },
+  { key: "grading", label: "채점 기준" },
   { key: "starter", label: "시작 코드" },
   { key: "tests", label: "테스트 케이스" },
 ];
+
+const DEFAULT_GRADING = {
+  process_weight: 50,
+  result_weight: 50,
+  process: [
+    { name: "문제 해결 접근", points: 40, desc: "문제를 정확히 이해하고 적절한 알고리즘·자료구조를 선택했는가" },
+    { name: "코드 품질", points: 30, desc: "가독성·구조·네이밍이 우수한가" },
+    { name: "AI 활용", points: 30, desc: "(AI 활용 시험) 질문의 질과 검증 태도, 맹목적 복붙 여부" },
+  ],
+  result: [
+    { name: "정답성", points: 70, desc: "테스트 케이스 통과율" },
+    { name: "효율성", points: 30, desc: "시간·공간 복잡도" },
+  ],
+};
+
+const KIND_OPTIONS: { id: ReferenceKind; label: string }[] = [
+  { id: "csv", label: "CSV" },
+  { id: "markdown", label: "Markdown" },
+  { id: "text", label: "텍스트" },
+  { id: "json", label: "JSON" },
+  { id: "image", label: "이미지" },
+];
+
+function detectKind(name: string, type: string): ReferenceKind {
+  if (type.startsWith("image/")) return "image";
+  const ext = name.toLowerCase().split(".").pop() ?? "";
+  if (ext === "csv") return "csv";
+  if (ext === "md" || ext === "markdown") return "markdown";
+  if (ext === "json") return "json";
+  return "text";
+}
 
 const STATEMENT_TEMPLATE = `## 문제
 
@@ -109,6 +151,8 @@ const EMPTY: Draft = {
   time_limit_ms: 2000,
   memory_limit_mb: 256,
   starter_code: { ...STARTER_TEMPLATE },
+  reference_files: [],
+  grading_criteria: DEFAULT_GRADING,
   test_cases: [
     { input: "", expected_output: "", is_sample: true, weight: 1 },
     { input: "", expected_output: "", is_sample: false, weight: 2 },
@@ -416,6 +460,20 @@ export function ProblemStudio({ initial, problemId }: { initial?: Problem; probl
                 </Card>
               )}
 
+              {tab === "reference" && (
+                <ReferenceEditor
+                  files={form.reference_files}
+                  onChange={(files) => set("reference_files", files)}
+                />
+              )}
+
+              {tab === "grading" && (
+                <GradingEditor
+                  gc={form.grading_criteria}
+                  onChange={(gc) => set("grading_criteria", gc)}
+                />
+              )}
+
               {tab === "starter" && (
                 <Card className="p-6">
                   <div className="mb-3 flex items-center justify-between">
@@ -529,6 +587,270 @@ export function ProblemStudio({ initial, problemId }: { initial?: Problem; probl
           <AuthoringChat getContext={getContext} applyTool={applyTool} />
         </div>
       </div>
+    </div>
+  );
+}
+
+/** 참고 자료 편집기 — 좌: 탐색기 + 파일 목록, 우: 선택 파일 편집/미리보기 */
+function ReferenceEditor({
+  files,
+  onChange,
+}: {
+  files: ReferenceFile[];
+  onChange: (files: ReferenceFile[]) => void;
+}) {
+  const [selected, setSelected] = useState<string | null>(files[0]?.path ?? null);
+  const [preview, setPreview] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const current = files.find((f) => f.path === selected) ?? null;
+
+  const update = (path: string, patch: Partial<ReferenceFile>) => {
+    onChange(files.map((f) => (f.path === path ? { ...f, ...patch } : f)));
+    if (patch.path && selected === path) setSelected(patch.path);
+  };
+
+  const addFile = () => {
+    let n = files.length + 1;
+    let path = `자료${n}.md`;
+    const paths = new Set(files.map((f) => f.path));
+    while (paths.has(path)) path = `자료${++n}.md`;
+    onChange([...files, { path, kind: "markdown", content: "" }]);
+    setSelected(path);
+  };
+
+  const removeFile = (path: string) => {
+    const next = files.filter((f) => f.path !== path);
+    onChange(next);
+    if (selected === path) setSelected(next[0]?.path ?? null);
+  };
+
+  const onUpload = (fileList: FileList | null) => {
+    if (!fileList) return;
+    const existing = new Set(files.map((f) => f.path));
+    const readers: Promise<ReferenceFile>[] = [];
+    for (const file of Array.from(fileList).slice(0, 20)) {
+      const kind = detectKind(file.name, file.type);
+      let path = file.name;
+      let i = 1;
+      while (existing.has(path)) path = `${file.name.replace(/(\.[^.]+)?$/, "")}_${i++}${file.name.match(/\.[^.]+$/)?.[0] ?? ""}`;
+      existing.add(path);
+      readers.push(
+        new Promise((resolve) => {
+          const r = new FileReader();
+          r.onload = () => resolve({ path, kind, content: String(r.result ?? "") });
+          if (kind === "image") r.readAsDataURL(file);
+          else r.readAsText(file);
+        }),
+      );
+    }
+    Promise.all(readers).then((added) => {
+      onChange([...files, ...added]);
+      if (added[0]) setSelected(added[0].path);
+      if (fileRef.current) fileRef.current.value = "";
+    });
+  };
+
+  return (
+    <Card className="p-0">
+      <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+        <div>
+          <span className="text-sm font-bold text-slate-800">참고 자료 ({files.length}개)</span>
+          <p className="mt-0.5 text-xs text-slate-400">응시자가 IDE 탐색기처럼 열람합니다. 경로에 “/”를 넣으면 폴더가 됩니다.</p>
+        </div>
+        <div className="flex gap-2">
+          <input
+            ref={fileRef}
+            type="file"
+            multiple
+            accept=".csv,.md,.markdown,.json,.txt,image/*"
+            className="hidden"
+            onChange={(e) => onUpload(e.target.files)}
+          />
+          <Button variant="secondary" onClick={() => fileRef.current?.click()}>
+            파일 업로드
+          </Button>
+          <Button variant="secondary" onClick={addFile}>
+            + 새 파일
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex min-h-[460px]">
+        {/* 탐색기 */}
+        <div className="w-64 shrink-0 border-r border-slate-100 bg-slate-50">
+          <Explorer files={files} activePath={selected} onOpen={setSelected} theme="light" />
+        </div>
+
+        {/* 편집 */}
+        <div className="min-w-0 flex-1 p-5">
+          {!current ? (
+            <p className="py-16 text-center text-sm text-slate-400">파일을 추가하거나 업로드하세요.</p>
+          ) : (
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div className="md:col-span-2">
+                  <Field label="경로 / 파일명">
+                    <input
+                      className={inputCls}
+                      value={current.path}
+                      onChange={(e) => update(current.path, { path: e.target.value })}
+                      placeholder="예: CSV 데이터/인사평가.csv"
+                    />
+                  </Field>
+                </div>
+                <Field label="종류">
+                  <select
+                    className={inputCls}
+                    value={current.kind}
+                    onChange={(e) => update(current.path, { kind: e.target.value as ReferenceKind })}
+                  >
+                    {KIND_OPTIONS.map((k) => (
+                      <option key={k.id} value={k.id}>
+                        {k.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+
+              {current.kind === "image" ? (
+                <div className="rounded-lg border border-slate-200 p-4">
+                  {current.content ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={current.content} alt={current.path} className="max-h-80 rounded" />
+                  ) : (
+                    <p className="text-sm text-slate-400">이미지는 업로드로 추가하세요.</p>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="text-sm font-medium text-slate-700">내용</span>
+                    <button
+                      className="text-xs font-medium text-violet-600 hover:underline"
+                      onClick={() => setPreview((v) => !v)}
+                    >
+                      {preview ? "편집" : "미리보기"}
+                    </button>
+                  </div>
+                  {preview ? (
+                    <div className="h-80 overflow-hidden rounded-lg border border-slate-200">
+                      <Viewer file={current} theme="light" />
+                    </div>
+                  ) : (
+                    <textarea
+                      className={`${inputCls} h-80 font-mono text-xs`}
+                      value={current.content}
+                      onChange={(e) => update(current.path, { content: e.target.value })}
+                      placeholder={current.kind === "csv" ? "헤더,열2\n값1,값2" : "내용을 입력하세요"}
+                    />
+                  )}
+                </div>
+              )}
+
+              <div className="flex justify-end">
+                <button
+                  className="text-xs text-red-500 hover:underline"
+                  onClick={() => removeFile(current.path)}
+                >
+                  이 파일 삭제
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/** 채점 기준 편집기 — 과정/결과 가중치 + 세부 항목 */
+function GradingEditor({
+  gc,
+  onChange,
+}: {
+  gc: Problem["grading_criteria"];
+  onChange: (gc: Problem["grading_criteria"]) => void;
+}) {
+  const process = gc.process ?? [];
+  const result = gc.result ?? [];
+
+  const editItems = (key: "process" | "result", items: CriterionItem[]) => onChange({ ...gc, [key]: items });
+
+  const section = (
+    title: string,
+    weightKey: "process_weight" | "result_weight",
+    listKey: "process" | "result",
+    items: CriterionItem[],
+  ) => (
+    <Card className="p-5">
+      <div className="mb-4 flex items-center justify-between">
+        <span className="text-sm font-bold text-slate-800">{title}</span>
+        <label className="flex items-center gap-2 text-sm text-slate-500">
+          가중치
+          <input
+            className="w-20 rounded-lg border border-slate-300 px-2 py-1 text-sm"
+            type="number"
+            min={0}
+            max={100}
+            value={gc[weightKey] ?? 50}
+            onChange={(e) => onChange({ ...gc, [weightKey]: Number(e.target.value) })}
+          />
+          %
+        </label>
+      </div>
+      <div className="space-y-2">
+        {items.map((it, i) => (
+          <div key={i} className="rounded-lg border border-slate-200 p-3">
+            <div className="flex items-center gap-2">
+              <input
+                className="flex-1 rounded border border-slate-300 px-2 py-1 text-sm font-medium"
+                value={it.name}
+                onChange={(e) => editItems(listKey, items.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
+                placeholder="평가 항목"
+              />
+              <input
+                className="w-20 rounded border border-slate-300 px-2 py-1 text-sm"
+                type="number"
+                min={0}
+                value={it.points}
+                onChange={(e) => editItems(listKey, items.map((x, j) => (j === i ? { ...x, points: Number(e.target.value) } : x)))}
+              />
+              <span className="text-xs text-slate-400">점</span>
+              <button
+                className="rounded p-1 text-slate-400 hover:text-red-500"
+                onClick={() => editItems(listKey, items.filter((_, j) => j !== i))}
+                aria-label="삭제"
+              >
+                ✕
+              </button>
+            </div>
+            <input
+              className="mt-2 w-full rounded border border-slate-200 px-2 py-1 text-xs text-slate-600"
+              value={it.desc ?? ""}
+              onChange={(e) => editItems(listKey, items.map((x, j) => (j === i ? { ...x, desc: e.target.value } : x)))}
+              placeholder="설명 (선택)"
+            />
+          </div>
+        ))}
+        <button
+          onClick={() => editItems(listKey, [...items, { name: "", points: 0, desc: "" }])}
+          className="w-full rounded-lg border border-dashed border-slate-300 py-2 text-sm text-slate-500 hover:border-slate-400 hover:text-slate-700"
+        >
+          + 항목 추가
+        </button>
+      </div>
+    </Card>
+  );
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-slate-400">
+        채점 기준은 응시자에게 그대로 노출되며, LLM 자동평가의 기준으로도 사용됩니다. 과정 + 결과 가중치는 합이
+        100%가 되도록 맞추는 것을 권장합니다.
+      </p>
+      {section("과정 평가", "process_weight", "process", process)}
+      {section("결과 평가", "result_weight", "result", result)}
     </div>
   );
 }

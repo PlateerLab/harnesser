@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 from ..db import get_db
 from ..deps import require_admin, require_staff
 from ..models import Problem, TestCase, User
+from ..problem_content import normalize_grading_criteria, normalize_reference_files
 from ..schemas import ProblemIn, ProblemOut, ProblemSummary
 
 router = APIRouter(prefix="/problems", tags=["problems"])
@@ -41,6 +42,8 @@ async def create_problem(body: ProblemIn, db: AsyncSession = Depends(get_db), us
         time_limit_ms=body.time_limit_ms,
         memory_limit_mb=body.memory_limit_mb,
         starter_code=body.starter_code,
+        reference_files=normalize_reference_files([r.model_dump() for r in body.reference_files]),
+        grading_criteria=normalize_grading_criteria(body.grading_criteria),
         created_by=user.id,
     )
     for i, tc in enumerate(body.test_cases):
@@ -74,6 +77,8 @@ async def update_problem(
     problem.time_limit_ms = body.time_limit_ms
     problem.memory_limit_mb = body.memory_limit_mb
     problem.starter_code = body.starter_code
+    problem.reference_files = normalize_reference_files([r.model_dump() for r in body.reference_files])
+    problem.grading_criteria = normalize_grading_criteria(body.grading_criteria)
     problem.test_cases.clear()
     for i, tc in enumerate(body.test_cases):
         problem.test_cases.append(

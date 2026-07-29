@@ -374,6 +374,8 @@ async def _attempt_out(attempt: Attempt, db: AsyncSession) -> AttemptOut:
                 time_limit_ms=p.time_limit_ms,
                 memory_limit_mb=p.memory_limit_mb,
                 starter_code=p.starter_code or {},
+                reference_files=p.reference_files or [],
+                grading_criteria=p.grading_criteria or {},
                 samples=[
                     SampleCase(input=tc.input, expected_output=tc.expected_output)
                     for tc in p.test_cases

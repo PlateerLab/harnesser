@@ -100,6 +100,20 @@ async def build_context(attempt: Attempt, db: AsyncSession) -> str:
         problem = await db.get(Problem, ap.problem_id)
         lines.append(f"\n## 문제: {problem.title} (배점 {ap.points})")
         lines.append(f"지문 요약: {problem.statement_md[:800]}")
+        gc = problem.grading_criteria or {}
+        if gc.get("process") or gc.get("result"):
+            crit = []
+            for it in (gc.get("process") or []):
+                crit.append(f"[과정] {it.get('name')}({it.get('points')}점): {it.get('desc', '')}")
+            for it in (gc.get("result") or []):
+                crit.append(f"[결과] {it.get('name')}({it.get('points')}점): {it.get('desc', '')}")
+            lines.append(
+                f"채점 기준 (과정 {gc.get('process_weight', 50)}% + 결과 {gc.get('result_weight', 50)}%):\n"
+                + "\n".join(f"  - {c}" for c in crit)
+            )
+        refs = problem.reference_files or []
+        if refs:
+            lines.append(f"참고 자료 {len(refs)}개: " + ", ".join(r.get("path", "") for r in refs))
         submits = [e for e in executions if e.problem_id == ap.problem_id and e.kind == "submit"]
         runs = [e for e in executions if e.problem_id == ap.problem_id and e.kind == "run"]
         best = max((s for s in submits if s.score is not None), key=lambda s: s.score, default=None)

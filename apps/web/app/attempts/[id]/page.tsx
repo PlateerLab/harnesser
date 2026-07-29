@@ -17,6 +17,9 @@ import { Markdown } from "@/components/Markdown";
 import { Timer } from "@/components/Timer";
 import { AiChat } from "@/components/AiChat";
 import { ExecutionResults } from "@/components/ExecutionResults";
+import { Explorer } from "@/components/reference/Explorer";
+import { Viewer } from "@/components/reference/Viewer";
+import { FileIcon } from "@/components/reference/FileIcon";
 import { Badge, Spinner } from "@/components/ui";
 import { useToast } from "@/components/toast";
 
@@ -91,6 +94,11 @@ export default function AttemptPage({ params }: { params: Promise<{ id: string }
 
   const [attempt, setAttempt] = useState<Attempt | null>(null);
   const [activeIdx, setActiveIdx] = useState(0);
+  // 좌측 패널 탭: 과제 지문 / 참고 자료 / 채점 기준
+  const [leftTab, setLeftTab] = useState<"statement" | "reference" | "grading">("statement");
+  // 중앙 문서 탭: 열어둔 참고 자료 경로 목록 + 활성 문서(null=코드 에디터)
+  const [openDocs, setOpenDocs] = useState<string[]>([]);
+  const [activeDoc, setActiveDoc] = useState<string | null>(null);
   const [codeState, setCodeState] = useState<CodeState>({});
   const [executions, setExecutions] = useState<Record<string, Execution | null>>({});
   const [busy, setBusy] = useState(false);
@@ -508,6 +516,29 @@ export default function AttemptPage({ params }: { params: Promise<{ id: string }
   const problem = attempt.problems[activeIdx];
   const st = codeState[problem.id];
   const isAi = attempt.mode === "ai_assisted";
+  const refFiles = problem.reference_files ?? [];
+  const gc = problem.grading_criteria ?? {};
+  const hasGrading = (gc.process?.length ?? 0) > 0 || (gc.result?.length ?? 0) > 0;
+  const activeRefFile = activeDoc ? refFiles.find((f) => f.path === activeDoc) ?? null : null;
+
+  const switchProblem = (i: number) => {
+    saveState(problem.id);
+    setActiveIdx(i);
+    setActiveDoc(null); // 문제 전환 시 코드 에디터로
+    setOpenDocs([]);
+    setLeftTab("statement");
+  };
+
+  const openRef = (path: string) => {
+    setOpenDocs((prev) => (prev.includes(path) ? prev : [...prev, path]));
+    setActiveDoc(path);
+    record("reference_open", problem.id, { path });
+  };
+
+  const closeRef = (path: string) => {
+    setOpenDocs((prev) => prev.filter((p) => p !== path));
+    setActiveDoc((cur) => (cur === path ? null : cur));
+  };
 
   return (
     <div className="flex h-screen flex-col bg-slate-900 text-slate-100">
@@ -541,128 +572,213 @@ export default function AttemptPage({ params }: { params: Promise<{ id: string }
 
       {/* 본문 3열: 지문 | 에디터+콘솔 | (AI 채팅) — 구분선 드래그로 크기 조절 */}
       <div ref={mainRef} className="flex min-h-0 flex-1">
-        {/* 지문 */}
-        <div className="flex min-w-[240px] flex-col" style={{ width: `${layout.leftPct}%` }}>
-          <div className="dark-scroll flex shrink-0 gap-1 overflow-x-auto border-b border-slate-700 px-2 pt-2">
-            {attempt.problems.map((p, i) => (
+        {/* 좌측: 문제 탭 + (과제 지문 / 참고 자료 / 채점 기준) */}
+        <div className="flex min-w-[260px] flex-col bg-slate-800" style={{ width: `${layout.leftPct}%` }}>
+          {/* 문제 선택 (여러 문제일 때) */}
+          {attempt.problems.length > 1 && (
+            <div className="dark-scroll flex shrink-0 gap-1 overflow-x-auto border-b border-slate-700 px-2 pt-2">
+              {attempt.problems.map((p, i) => (
+                <button
+                  key={p.id}
+                  onClick={() => switchProblem(i)}
+                  title={`${i + 1}. ${p.title}`}
+                  className={`max-w-48 shrink-0 truncate rounded-t-lg px-4 py-2 text-sm font-medium ${
+                    i === activeIdx ? "bg-slate-900 text-white" : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  {i + 1}. {p.title}
+                </button>
+              ))}
+            </div>
+          )}
+          {/* 콘텐츠 유형 탭 */}
+          <div className="flex shrink-0 items-center gap-4 border-b border-slate-700 px-4">
+            {(
+              [
+                ["statement", "과제 지문", null],
+                ["reference", "참고 자료", refFiles.length],
+                ["grading", "채점 기준", null],
+              ] as const
+            ).map(([key, label, count]) => (
               <button
-                key={p.id}
-                onClick={() => {
-                  saveState(problem.id); // 탭 전환 전 현재 문제 저장
-                  setActiveIdx(i);
-                }}
-                title={`${i + 1}. ${p.title}`}
-                className={`max-w-48 shrink-0 truncate rounded-t-lg px-4 py-2 text-sm font-medium ${
-                  i === activeIdx ? "bg-slate-800 text-white" : "text-slate-400 hover:text-slate-200"
+                key={key}
+                onClick={() => setLeftTab(key)}
+                className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 py-2.5 text-sm font-medium transition ${
+                  leftTab === key
+                    ? "border-violet-400 text-white"
+                    : "border-transparent text-slate-400 hover:text-slate-200"
                 }`}
               >
-                {i + 1}. {p.title}
+                {label}
+                {count != null && count > 0 && (
+                  <span className="rounded-full bg-slate-700 px-1.5 text-[11px] text-slate-300">{count}</span>
+                )}
               </button>
             ))}
           </div>
-          <div className="dark-scroll min-h-0 flex-1 overflow-y-auto bg-slate-800 p-5">
-            <div className="mb-3 flex min-w-0 items-center gap-2">
-              <Badge value={problem.difficulty} label={DIFFICULTY_LABEL[problem.difficulty]} />
-              <span
-                className="min-w-0 truncate text-xs text-slate-400"
-                title={`배점 ${problem.points} · 시간 ${problem.time_limit_ms}ms · 메모리 ${problem.memory_limit_mb}MB`}
-              >
-                배점 {problem.points} · 시간 {problem.time_limit_ms}ms · 메모리 {problem.memory_limit_mb}MB
-              </span>
-            </div>
-            <Markdown dark>{problem.statement_md}</Markdown>
-            {problem.samples.length > 0 && (
-              <div className="mt-6 space-y-3">
-                <h3 className="text-sm font-bold text-slate-200">예시</h3>
-                {problem.samples.map((s, i) => (
-                  <div key={i} className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <div className="mb-1 text-slate-400">입력 {i + 1}</div>
-                      <pre className="dark-scroll overflow-auto rounded bg-slate-950 p-2 text-slate-200">{s.input}</pre>
-                    </div>
-                    <div>
-                      <div className="mb-1 text-slate-400">출력 {i + 1}</div>
-                      <pre className="dark-scroll overflow-auto rounded bg-slate-950 p-2 text-slate-200">{s.expected_output}</pre>
-                    </div>
-                  </div>
-                ))}
+
+          {/* 과제 지문 */}
+          {leftTab === "statement" && (
+            <div className="dark-scroll min-h-0 flex-1 overflow-y-auto p-5">
+              <div className="mb-3 flex min-w-0 items-center gap-2">
+                <Badge value={problem.difficulty} label={DIFFICULTY_LABEL[problem.difficulty]} />
+                <span
+                  className="min-w-0 truncate text-xs text-slate-400"
+                  title={`배점 ${problem.points} · 시간 ${problem.time_limit_ms}ms · 메모리 ${problem.memory_limit_mb}MB`}
+                >
+                  배점 {problem.points} · 시간 {problem.time_limit_ms}ms · 메모리 {problem.memory_limit_mb}MB
+                </span>
               </div>
-            )}
-          </div>
+              <Markdown dark>{problem.statement_md}</Markdown>
+              {problem.samples.length > 0 && (
+                <div className="mt-6 space-y-3">
+                  <h3 className="text-sm font-bold text-slate-200">예시</h3>
+                  {problem.samples.map((s, i) => (
+                    <div key={i} className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <div className="mb-1 text-slate-400">입력 {i + 1}</div>
+                        <pre className="dark-scroll overflow-auto rounded bg-slate-950 p-2 text-slate-200">{s.input}</pre>
+                      </div>
+                      <div>
+                        <div className="mb-1 text-slate-400">출력 {i + 1}</div>
+                        <pre className="dark-scroll overflow-auto rounded bg-slate-950 p-2 text-slate-200">{s.expected_output}</pre>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 참고 자료 — VSCode 탐색기 */}
+          {leftTab === "reference" && (
+            <div className="dark-scroll min-h-0 flex-1 overflow-y-auto">
+              <Explorer files={refFiles} activePath={activeDoc} onOpen={openRef} theme="dark" />
+            </div>
+          )}
+
+          {/* 채점 기준 */}
+          {leftTab === "grading" && (
+            <div className="dark-scroll min-h-0 flex-1 overflow-y-auto p-5">
+              {hasGrading ? <GradingView gc={gc} /> : <p className="text-sm text-slate-500">채점 기준이 없습니다.</p>}
+            </div>
+          )}
         </div>
 
         <Divider orientation="vertical" onMove={onStatementResize} />
 
-        {/* 에디터 + 콘솔 */}
+        {/* 중앙: 문서 탭(코드 + 참고 자료) */}
         <div ref={editorColRef} className="flex min-w-[320px] flex-1 flex-col">
-          <div className="flex h-11 shrink-0 items-center justify-between gap-2 overflow-hidden border-b border-slate-700 px-3">
-            <select
-              className="shrink-0 rounded-lg border border-slate-600 bg-slate-800 px-2 py-1 text-sm"
-              value={st.language}
-              onChange={(e) => {
-                const lang = e.target.value as Language;
-                setCodeState((prev) => ({
-                  ...prev,
-                  [problem.id]: { ...prev[problem.id], language: lang },
-                }));
-                record("language_change", problem.id, { from: st.language, to: lang });
-                scheduleStateSave(problem.id);
-              }}
+          {/* 탭 바 */}
+          <div className="dark-scroll flex h-10 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-slate-700 bg-slate-900 px-1">
+            <button
+              onClick={() => setActiveDoc(null)}
+              className={`flex h-8 shrink-0 items-center gap-1.5 rounded-md px-3 text-sm ${
+                activeDoc === null ? "bg-slate-800 text-white" : "text-slate-400 hover:text-slate-200"
+              }`}
             >
-              {LANGUAGES.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.label}
-                </option>
+              <FileIcon kind="text" />
+              코드
+            </button>
+            {openDocs
+              .map((path) => refFiles.find((f) => f.path === path))
+              .filter((f): f is NonNullable<typeof f> => !!f)
+              .map((f) => (
+                <div
+                  key={f.path}
+                  className={`group flex h-8 shrink-0 items-center gap-1.5 rounded-md pl-3 pr-1.5 text-sm ${
+                    activeDoc === f.path ? "bg-slate-800 text-white" : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  <button onClick={() => setActiveDoc(f.path)} className="flex items-center gap-1.5" title={f.path}>
+                    <FileIcon kind={f.kind} />
+                    <span className="max-w-40 truncate">{f.path.split("/").pop()}</span>
+                  </button>
+                  <button
+                    onClick={() => closeRef(f.path)}
+                    className="ml-1 rounded p-0.5 text-slate-500 hover:bg-slate-700 hover:text-slate-200"
+                    aria-label="닫기"
+                  >
+                    <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden>
+                      <path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    </svg>
+                  </button>
+                </div>
               ))}
-            </select>
-            <div className="flex shrink-0 gap-2">
-              <button
-                onClick={() => execute("run")}
-                disabled={busy}
-                className="whitespace-nowrap rounded-lg border border-slate-600 px-4 py-1 text-sm hover:bg-slate-800 disabled:opacity-40"
-              >
-                실행
-              </button>
-              <button
-                onClick={() => execute("submit")}
-                disabled={busy}
-                className="whitespace-nowrap rounded-lg bg-emerald-600 px-4 py-1 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-40"
-              >
-                제출
-              </button>
-            </div>
           </div>
-          <div className="min-h-0 flex-1">
-            <CodeEditor
-              language={st.language}
-              value={st.codeByLang[st.language] ?? ""}
-              onChange={(code) => {
-                setCodeState((prev) => ({
-                  ...prev,
-                  [problem.id]: {
-                    ...prev[problem.id],
-                    codeByLang: { ...prev[problem.id].codeByLang, [st.language]: code },
-                  },
-                }));
-                scheduleStateSave(problem.id);
-              }}
-              onPaste={(text) =>
-                record("paste", problem.id, { chars: text.length, text: text.slice(0, 10000) })
-              }
-            />
-          </div>
-          <Divider orientation="horizontal" onMove={onConsoleResize} />
-          <div
-            className="flex shrink-0 flex-col bg-slate-900"
-            style={{ height: layout.consoleH, maxHeight: "75%" }}
-          >
-            <div className="flex h-8 shrink-0 items-center border-b border-slate-800 px-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
-              실행 결과
+
+          {activeRefFile ? (
+            /* 참고 자료 뷰어 */
+            <div className="min-h-0 flex-1 overflow-hidden">
+              <Viewer file={activeRefFile} theme="dark" />
             </div>
-            <div className="dark-scroll min-h-0 flex-1 overflow-y-auto">
-              <ExecutionResults execution={executions[problem.id] ?? null} />
-            </div>
-          </div>
+          ) : (
+            /* 코드 에디터 + 실행 결과 */
+            <>
+              <div className="flex h-11 shrink-0 items-center justify-between gap-2 overflow-hidden border-b border-slate-700 px-3">
+                <select
+                  className="shrink-0 rounded-lg border border-slate-600 bg-slate-800 px-2 py-1 text-sm"
+                  value={st.language}
+                  onChange={(e) => {
+                    const lang = e.target.value as Language;
+                    setCodeState((prev) => ({ ...prev, [problem.id]: { ...prev[problem.id], language: lang } }));
+                    record("language_change", problem.id, { from: st.language, to: lang });
+                    scheduleStateSave(problem.id);
+                  }}
+                >
+                  {LANGUAGES.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.label}
+                    </option>
+                  ))}
+                </select>
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    onClick={() => execute("run")}
+                    disabled={busy}
+                    className="whitespace-nowrap rounded-lg border border-slate-600 px-4 py-1 text-sm hover:bg-slate-800 disabled:opacity-40"
+                  >
+                    실행
+                  </button>
+                  <button
+                    onClick={() => execute("submit")}
+                    disabled={busy}
+                    className="whitespace-nowrap rounded-lg bg-emerald-600 px-4 py-1 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-40"
+                  >
+                    제출
+                  </button>
+                </div>
+              </div>
+              <div className="min-h-0 flex-1">
+                <CodeEditor
+                  language={st.language}
+                  value={st.codeByLang[st.language] ?? ""}
+                  onChange={(code) => {
+                    setCodeState((prev) => ({
+                      ...prev,
+                      [problem.id]: {
+                        ...prev[problem.id],
+                        codeByLang: { ...prev[problem.id].codeByLang, [st.language]: code },
+                      },
+                    }));
+                    scheduleStateSave(problem.id);
+                  }}
+                  onPaste={(text) =>
+                    record("paste", problem.id, { chars: text.length, text: text.slice(0, 10000) })
+                  }
+                />
+              </div>
+              <Divider orientation="horizontal" onMove={onConsoleResize} />
+              <div className="flex shrink-0 flex-col bg-slate-900" style={{ height: layout.consoleH, maxHeight: "75%" }}>
+                <div className="flex h-8 shrink-0 items-center border-b border-slate-800 px-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  실행 결과
+                </div>
+                <div className="dark-scroll min-h-0 flex-1 overflow-y-auto">
+                  <ExecutionResults execution={executions[problem.id] ?? null} />
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* AI 채팅 */}
@@ -684,6 +800,43 @@ export default function AttemptPage({ params }: { params: Promise<{ id: string }
           onFinish={finish}
         />
       )}
+    </div>
+  );
+}
+
+/** 채점 기준 표시 (다크) — 과정/결과 가중치 + 세부 항목 */
+function GradingView({ gc }: { gc: import("@/lib/types").Problem["grading_criteria"] }) {
+  const section = (title: string, weight: number | undefined, items: import("@/lib/types").CriterionItem[] | undefined) => {
+    if (!items || items.length === 0) return null;
+    return (
+      <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <span className="text-sm font-bold text-slate-100">{title}</span>
+          {weight != null && (
+            <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-xs font-semibold text-violet-300">
+              {weight}%
+            </span>
+          )}
+        </div>
+        <div className="space-y-2">
+          {items.map((it, i) => (
+            <div key={i} className="rounded-lg bg-slate-800/60 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-medium text-slate-200">{it.name}</span>
+                <span className="shrink-0 text-xs font-semibold text-slate-400">{it.points}점</span>
+              </div>
+              {it.desc && <p className="mt-1 text-xs text-slate-400">{it.desc}</p>}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-slate-500">이 과제는 다음 기준으로 평가됩니다.</p>
+      {section("과정 평가", gc.process_weight, gc.process)}
+      {section("결과 평가", gc.result_weight, gc.result)}
     </div>
   );
 }

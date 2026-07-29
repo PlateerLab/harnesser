@@ -45,6 +45,10 @@ class Problem(Base):
     time_limit_ms: Mapped[int] = mapped_column(Integer, default=2000)
     memory_limit_mb: Mapped[int] = mapped_column(Integer, default=256)
     starter_code: Mapped[dict] = mapped_column(JSONB, default=dict)  # {language: code}
+    # 참고 자료 — 경로 기반 계층 파일 목록 [{path, kind, content}] (기본 없음)
+    reference_files: Mapped[list] = mapped_column(JSONB, default=list)
+    # 채점 기준 — 과정/결과 가중치 + 세부 항목 (기본값은 seed/서비스에서 주입)
+    grading_criteria: Mapped[dict] = mapped_column(JSONB, default=dict)
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
     created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

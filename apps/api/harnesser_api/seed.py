@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import Assessment, AssessmentProblem, Assignment, Problem, TestCase, User
+from .problem_content import default_grading_criteria
 from .security import hash_password
 
 
@@ -261,6 +262,7 @@ async def seed_if_empty(db: AsyncSession) -> None:
 - 예시 1: 1 + 2 = 3
 - 예시 2: -3 + 10 = 7
 """,
+        grading_criteria=default_grading_criteria(),
     )
     p1.test_cases = [
         TestCase(ordinal=0, input="1 2\n", expected_output="3\n", is_sample=True, weight=1),
@@ -307,6 +309,11 @@ async def seed_if_empty(db: AsyncSession) -> None:
 - 예시 1: `()[]{}` — 세 쌍이 각각 올바르게 닫혀 `true`
 - 예시 2: `([)]` — `[`가 닫히기 전에 `(`의 짝인 `)`가 나와 `false`
 """,
+        grading_criteria=default_grading_criteria(),
+        reference_files=[
+            {"path": "데이터/괄호_샘플.csv", "kind": "csv", "content": "입력,기대출력\n()[]{},true\n([)],false\n{[()]},true\n"},
+            {"path": "설명/스택_힌트.md", "kind": "markdown", "content": "## 힌트\n\n여는 괄호는 스택에 push, 닫는 괄호를 만나면 스택 top과 짝을 비교하세요.\n\n- 스택이 비었는데 닫는 괄호가 나오면 false\n- 순회 후 스택이 비어야 true"},
+        ],
     )
     p2.test_cases = [
         TestCase(ordinal=0, input="()[]{}\n", expected_output="true\n", is_sample=True, weight=1),
@@ -354,6 +361,7 @@ async def seed_if_empty(db: AsyncSession) -> None:
 - 예시 1: {10, 20, 30, 50} → 4
 - 예시 2: 원소가 하나뿐이므로 1
 """,
+        grading_criteria=default_grading_criteria(),
     )
     p3.test_cases = [
         TestCase(ordinal=0, input="6\n10 20 10 30 20 50\n", expected_output="4\n", is_sample=True, weight=1),

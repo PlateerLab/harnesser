@@ -74,6 +74,12 @@ class TestCaseOut(TestCaseIn):
     model_config = {"from_attributes": True}
 
 
+class ReferenceFileIn(BaseModel):
+    path: str = Field(min_length=1, max_length=300)
+    kind: Literal["csv", "markdown", "text", "image", "json"] = "text"
+    content: str = ""
+
+
 class ProblemIn(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     statement_md: str = ""
@@ -81,6 +87,8 @@ class ProblemIn(BaseModel):
     time_limit_ms: int = Field(default=2000, ge=100, le=30000)
     memory_limit_mb: int = Field(default=256, ge=16, le=2048)
     starter_code: dict[str, str] = {}
+    reference_files: list[ReferenceFileIn] = []
+    grading_criteria: dict = {}
     test_cases: list[TestCaseIn] = []
 
 
@@ -92,6 +100,8 @@ class ProblemOut(BaseModel):
     time_limit_ms: int
     memory_limit_mb: int
     starter_code: dict[str, str]
+    reference_files: list[ReferenceFileIn] = []
+    grading_criteria: dict = {}
     created_at: datetime
     updated_at: datetime
     test_cases: list[TestCaseOut] = []
@@ -237,6 +247,8 @@ class AttemptProblemOut(BaseModel):
     time_limit_ms: int
     memory_limit_mb: int
     starter_code: dict[str, str]
+    reference_files: list[ReferenceFileIn] = []
+    grading_criteria: dict = {}
     samples: list[SampleCase]
     saved_language: str | None = None
     saved_code: str | None = None

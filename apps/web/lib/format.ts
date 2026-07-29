@@ -70,6 +70,7 @@ export const EVENT_LABEL: Record<string, string> = {
   submit_result: "채점 결과",
   ai_message: "AI 대화",
   language_change: "언어 변경",
+  reference_open: "참고 자료 열람",
 };
 
 /** 이탈성 이벤트 (통계·필터 공용) */

@@ -27,6 +27,27 @@ export interface TestCase {
   ordinal?: number;
 }
 
+export type ReferenceKind = "csv" | "markdown" | "text" | "image" | "json";
+
+export interface ReferenceFile {
+  path: string;
+  kind: ReferenceKind;
+  content: string;
+}
+
+export interface CriterionItem {
+  name: string;
+  points: number;
+  desc?: string;
+}
+
+export interface GradingCriteria {
+  process_weight: number;
+  result_weight: number;
+  process: CriterionItem[];
+  result: CriterionItem[];
+}
+
 export interface Problem {
   id: string;
   title: string;
@@ -35,6 +56,8 @@ export interface Problem {
   time_limit_ms: number;
   memory_limit_mb: number;
   starter_code: Record<string, string>;
+  reference_files: ReferenceFile[];
+  grading_criteria: Partial<GradingCriteria>;
   test_cases: TestCase[];
   created_at: string;
   updated_at: string;
@@ -168,6 +191,8 @@ export interface AttemptProblem {
   time_limit_ms: number;
   memory_limit_mb: number;
   starter_code: Record<string, string>;
+  reference_files: ReferenceFile[];
+  grading_criteria: Partial<GradingCriteria>;
   samples: { input: string; expected_output: string }[];
   saved_language: string | null;
   saved_code: string | null;

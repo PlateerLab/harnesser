@@ -32,6 +32,9 @@ MIGRATIONS = [
     # 재응시 기록 보존: 시도당 1개 제약 해제 + superseded 플래그
     "ALTER TABLE attempts ADD COLUMN IF NOT EXISTS superseded BOOLEAN NOT NULL DEFAULT FALSE",
     "ALTER TABLE attempts DROP CONSTRAINT IF EXISTS attempts_assessment_id_user_id_key",
+    # 문제 확장 콘텐츠: 참고 자료 + 채점 기준
+    "ALTER TABLE problems ADD COLUMN IF NOT EXISTS reference_files JSONB NOT NULL DEFAULT '[]'::jsonb",
+    "ALTER TABLE problems ADD COLUMN IF NOT EXISTS grading_criteria JSONB NOT NULL DEFAULT '{}'::jsonb",
 ]
 
 
