@@ -187,6 +187,7 @@ async def attempt_detail(attempt_id: uuid.UUID, db: AsyncSession = Depends(get_d
             "id": str(attempt.id),
             "status": attempt.status,
             "superseded": attempt.superseded,
+            "is_staff": attempt.user.role != "candidate",
             "started_at": attempt.started_at.isoformat(),
             "deadline_at": attempt.deadline_at.isoformat(),
             "submitted_at": attempt.submitted_at.isoformat() if attempt.submitted_at else None,

@@ -15,7 +15,7 @@ export default function DashboardPage() {
   const [assignments, setAssignments] = useState<MyAssignment[] | null>(null);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
-  const { toast, confirm } = useToast();
+  const { toast } = useToast();
   const router = useRouter();
 
   const isStaff = user?.role === "admin" || user?.role === "evaluator";
@@ -39,19 +39,6 @@ export default function DashboardPage() {
     }
   };
 
-  const retake = async (a: MyAssignment) => {
-    if (!a.attempt_id) return;
-    if (!(await confirm({ title: "다시 응시할까요?", confirmLabel: "다시 응시", danger: true }))) return;
-    setBusyId(a.assessment_id);
-    try {
-      const attempt = await api.post<Attempt>(`/attempts/${a.attempt_id}/retake`);
-      router.push(`/attempts/${attempt.id}`);
-    } catch (e) {
-      toast(e instanceof ApiError ? e.message : "다시 응시할 수 없습니다", "error");
-      setBusyId(null);
-    }
-  };
-
   if (loading || !user) return <Spinner label="불러오는 중..." />;
 
   return (
@@ -61,17 +48,15 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-black">
             Harnesser<span className="text-violet-500">.</span>
           </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            {user.name}님, {isStaff ? "전체 시험 목록입니다." : "배정된 시험 목록입니다."}
-          </p>
+          <p className="mt-1 text-sm text-slate-500">{user.name}님, 응시할 시험 목록입니다.</p>
         </div>
         <div className="flex items-center gap-2">
           {isStaff && (
             <Link
               href={user.role === "admin" ? "/admin/problems" : "/review"}
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
             >
-              관리자 콘솔
+              관리자 콘솔로
             </Link>
           )}
           <Button variant="ghost" onClick={() => logout(router)}>
@@ -80,18 +65,11 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {isStaff && (
-        <div className="mb-6 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-800">
-          <b>스태프 미리보기 모드</b> — 배정 여부와 관계없이 모든 시험을 응시자와 동일한 화면에서 체험할 수 있고,
-          완료한 응시는 <b>다시 응시</b>할 수 있으며, 이전 기록은 삭제되지 않고 리뷰에 보존됩니다. 체험 응시는 리뷰 목록에 <b>체험</b> 배지로 표시됩니다.
-        </div>
-      )}
-
       {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
       {!assignments ? (
         <Spinner />
       ) : assignments.length === 0 ? (
-        <EmptyState message={isStaff ? "등록된 시험이 없습니다. 관리자 콘솔에서 시험을 만드세요." : "배정된 시험이 없습니다. 관리자에게 문의하세요."} />
+        <EmptyState message="배정된 시험이 없습니다." />
       ) : (
         <div className="space-y-4">
           {assignments.map((a) => {
@@ -110,9 +88,6 @@ export default function DashboardPage() {
                       {a.attempt_status && (
                         <Badge value={a.attempt_status} label={STATUS_LABEL[a.attempt_status]} />
                       )}
-                      {isStaff && !a.assigned && (
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">미배정</span>
-                      )}
                     </div>
                     {a.description && <p className="mt-2 text-sm text-slate-600">{a.description}</p>}
                     <p className="mt-2 text-xs text-slate-400">
@@ -125,23 +100,9 @@ export default function DashboardPage() {
                     {a.attempt_status === "in_progress" ? (
                       <Button onClick={() => router.push(`/attempts/${a.attempt_id}`)}>이어서 응시</Button>
                     ) : finished ? (
-                      isStaff ? (
-                        <>
-                          <Link
-                            href={`/review/attempts/${a.attempt_id}`}
-                            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                          >
-                            결과 리뷰
-                          </Link>
-                          <Button variant="secondary" onClick={() => retake(a)} disabled={busy}>
-                            {busy ? "시작 중..." : "다시 응시"}
-                          </Button>
-                        </>
-                      ) : (
-                        <Button variant="secondary" disabled>
-                          응시 완료
-                        </Button>
-                      )
+                      <Button variant="secondary" disabled>
+                        응시 완료
+                      </Button>
                     ) : (
                       <Button onClick={() => start(a.assessment_id)} disabled={busy}>
                         {busy ? "준비 중..." : "응시 시작"}

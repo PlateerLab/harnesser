@@ -279,6 +279,7 @@ export interface ReviewDetail {
     id: string;
     status: string;
     superseded?: boolean;
+    is_staff?: boolean;
     started_at: string;
     deadline_at: string;
     submitted_at: string | null;

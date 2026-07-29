@@ -2,7 +2,7 @@
 
 import { use, useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/api";
-import type { Evaluation, ReviewDetail } from "@/lib/types";
+import type { Attempt, Evaluation, ReviewDetail } from "@/lib/types";
 import {
   DIFFICULTY_LABEL,
   fmtDateTime,
@@ -11,6 +11,7 @@ import {
   STATUS_LABEL,
   VERDICT_LABEL,
 } from "@/lib/format";
+import { useRouter } from "next/navigation";
 import { useUser } from "@/components/useUser";
 import { Shell } from "@/components/Shell";
 import { Badge, Button, Card, Field, inputCls, Spinner } from "@/components/ui";
@@ -34,12 +35,26 @@ interface EvalProvider {
 export default function ReviewAttemptPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { user, loading } = useUser(["admin", "evaluator"]);
+  const router = useRouter();
   const [detail, setDetail] = useState<ReviewDetail | null>(null);
   const [tab, setTab] = useState<Tab>("개요");
   // 시험 → 개별 문제 계층 필터: 타임라인/코드 재생/제출 기록/AI 대화에 공통 적용
   const [problemFilter, setProblemFilter] = useState<string>("all");
+  const [retaking, setRetaking] = useState(false);
+  const { toast } = useToast();
 
   const load = () => api.get<ReviewDetail>(`/review/attempts/${id}`).then(setDetail);
+
+  const retake = async () => {
+    setRetaking(true);
+    try {
+      const attempt = await api.post<Attempt>(`/attempts/${id}/retake`);
+      router.push(`/attempts/${attempt.id}`);
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : "다시 체험할 수 없습니다", "error");
+      setRetaking(false);
+    }
+  };
 
   useEffect(() => {
     if (user) load();
