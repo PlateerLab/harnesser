@@ -6,7 +6,58 @@
 - 채점 기준: 과정 평가 + 결과 평가 가중치와 세부 항목. 기본값 제공.
 """
 
+import json
+
 REFERENCE_KINDS = ["csv", "markdown", "text", "image", "json"]
+
+# 응시자 AI가 참고 자료를 열람하는 도구 — 접근 경계는 '현재 문제의 참고 자료'로 한정된다.
+# 지문/테스트/다른 문제에는 접근할 수 없고, 등록된 파일 경로만 읽을 수 있다.
+REFERENCE_READ_CAP = 24_000  # 파일 1회 열람 시 반환 상한
+
+REFERENCE_TOOLS: list[dict] = [
+    {
+        "name": "list_reference_files",
+        "description": "이 문제에 첨부된 참고 자료 파일 목록(경로·종류)을 반환합니다. 내용은 포함하지 않습니다. 어떤 자료가 있는지 먼저 확인할 때 사용하세요.",
+        "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
+    },
+    {
+        "name": "read_reference_file",
+        "description": "참고 자료 파일 하나의 내용을 읽습니다. path는 list_reference_files가 반환한 정확한 경로여야 합니다. 목록에 없는 파일은 읽을 수 없습니다.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"path": {"type": "string", "description": "정확한 파일 경로"}},
+            "required": ["path"],
+            "additionalProperties": False,
+        },
+    },
+]
+
+
+def execute_reference_tool(name: str, tool_input: dict, reference_files: list[dict]) -> str:
+    """참고 자료 도구 실행 — reference_files 밖의 어떤 것도 노출하지 않는다."""
+    index = {f.get("path"): f for f in reference_files}
+    if name == "list_reference_files":
+        if not reference_files:
+            return "이 문제에는 첨부된 참고 자료가 없습니다."
+        return json.dumps(
+            [{"path": f.get("path"), "kind": f.get("kind")} for f in reference_files],
+            ensure_ascii=False,
+        )
+    if name == "read_reference_file":
+        path = str((tool_input or {}).get("path", "")).strip()
+        f = index.get(path)
+        if not f:
+            avail = ", ".join(p for p in index if p) or "없음"
+            return (
+                f"거부됨 — '{path}'는 접근 가능한 참고 자료가 아닙니다. "
+                f"list_reference_files로 목록을 확인한 뒤 정확한 경로로 다시 요청하세요. (접근 가능: {avail})"
+            )
+        if f.get("kind") == "image":
+            return f"[이미지 파일: {path}] 이미지 내용은 텍스트로 제공되지 않습니다. 필요하면 응시자에게 이미지 설명을 요청하세요."
+        content = str(f.get("content", ""))
+        truncated = "\n\n…(이하 생략)" if len(content) > REFERENCE_READ_CAP else ""
+        return content[:REFERENCE_READ_CAP] + truncated
+    return f"알 수 없는 도구: {name}"
 
 MAX_REFERENCE_FILES = 40
 MAX_TEXT_CONTENT = 400_000  # 텍스트 파일 1개 상한 (약 400KB)

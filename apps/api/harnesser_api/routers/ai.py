@@ -8,11 +8,17 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..ai import provider
-from ..ai.chat_service import SYSTEM_PROMPT, used_turns
+from ..ai.chat_service import (
+    MAX_TOOL_ITERATIONS,
+    REFERENCE_SYSTEM_SUFFIX,
+    SYSTEM_PROMPT,
+    used_turns,
+)
+from ..problem_content import REFERENCE_TOOLS, execute_reference_tool
 from ..config import settings
 from ..db import SessionLocal, get_db
 from ..deps import get_current_user
-from ..models import AiMessage, Assessment, Event, User
+from ..models import AiMessage, Assessment, Event, Problem, User
 from ..schemas import AiChatIn, AiMessageOut
 from .attempts import get_attempt_for
 
@@ -87,8 +93,14 @@ async def chat(
     if res is None or not res.configured:
         raise HTTPException(503, "AI가 설정되지 않았습니다. 관리자에게 문의하세요 (관리자 콘솔 > 설정)")
 
-    # 제로 컨텍스트: 시스템은 문제 정보를 주입하지 않는다 (스레드 구분에만 problem_id 사용)
+    # 제로 컨텍스트: 지문은 주입하지 않되, 참고 자료가 있으면 열람 도구만 제공
     system_text = SYSTEM_PROMPT
+    reference_files: list[dict] = []
+    if body.problem_id:
+        prob = await db.get(Problem, body.problem_id)
+        if prob and prob.reference_files:
+            reference_files = list(prob.reference_files)
+            system_text += REFERENCE_SYSTEM_SUFFIX
     messages: list[dict] = []
     history_q = (
         select(AiMessage)
@@ -164,15 +176,54 @@ async def chat(
             await s.commit()
             return str(msg.id)
 
+    async def reference_tool_stream():
+        """SSE에서의 참고 자료 도구 루프 — delta/tool 이벤트를 순서대로 yield."""
+        client = provider.build_client(res)
+        for _ in range(MAX_TOOL_ITERATIONS):
+            response = await client.create_message(
+                model_config=provider._model_config(res),
+                messages=messages,
+                system=system_text,
+                tools=REFERENCE_TOOLS,
+                purpose="harnesser.chat.reference",
+            )
+            text = (response.text or "").strip()
+            tool_calls = response.tool_calls
+            if text:
+                yield ("delta", text)
+            if not tool_calls:
+                messages.append({"role": "assistant", "content": text or "(응답 없음)"})
+                return
+            ac: list[dict] = ([{"type": "text", "text": text}] if text else []) + [
+                {"type": "tool_use", "id": b.tool_use_id, "name": b.tool_name, "input": b.tool_input or {}}
+                for b in tool_calls
+            ]
+            messages.append({"role": "assistant", "content": ac})
+            results = []
+            for b in tool_calls:
+                out = execute_reference_tool(b.tool_name, b.tool_input or {}, reference_files)
+                detail = str((b.tool_input or {}).get("path", "")) if b.tool_name == "read_reference_file" else "목록"
+                yield ("tool", {"name": b.tool_name, "detail": detail})
+                results.append({"type": "tool_result", "tool_use_id": b.tool_use_id, "content": str(out)[:24000]})
+            messages.append({"role": "user", "content": results})
+
     async def event_stream():
         parts: list[str] = []
         error: str | None = None
         persisted = False
         try:
             try:
-                async for delta in provider.stream_text(res, messages, system=system_text):
-                    parts.append(delta)
-                    yield f"data: {json.dumps({'delta': delta}, ensure_ascii=False)}\n\n"
+                if reference_files:
+                    async for kind, payload in reference_tool_stream():
+                        if kind == "delta":
+                            parts.append(payload)
+                            yield f"data: {json.dumps({'delta': payload}, ensure_ascii=False)}\n\n"
+                        else:
+                            yield f"data: {json.dumps({'tool': payload}, ensure_ascii=False)}\n\n"
+                else:
+                    async for delta in provider.stream_text(res, messages, system=system_text):
+                        parts.append(delta)
+                        yield f"data: {json.dumps({'delta': delta}, ensure_ascii=False)}\n\n"
             except Exception as e:  # noqa: BLE001 — 오류도 응답으로 전달
                 error = str(e)
                 yield f"data: {json.dumps({'error': error}, ensure_ascii=False)}\n\n"

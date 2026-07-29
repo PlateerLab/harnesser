@@ -17,15 +17,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import settings
 from ..db import SessionLocal
-from ..models import AiMessage, Assessment, Attempt, Event
+from ..models import AiMessage, Assessment, Attempt, Event, Problem
+from ..problem_content import REFERENCE_TOOLS, execute_reference_tool
 from . import provider as ai_provider
 
 # 제로 컨텍스트 원칙: 시스템은 시험/문제/코드에 대한 어떤 정보도 주입하지 않는다.
-# 에이전트는 응시자가 채팅으로 직접 제공한 내용만 알 수 있다.
+# 에이전트는 응시자가 채팅으로 직접 제공한 내용 + (있다면) 참고 자료 도구로 열람한 것만 안다.
 SYSTEM_PROMPT = """당신은 코딩 테스트 응시자를 돕는 AI 어시스턴트입니다.
 당신에게는 시험이나 문제에 대한 어떤 정보도 제공되지 않습니다 — 응시자가 대화에 직접 붙여넣거나 설명한 내용만 알 수 있으며, 모르는 내용을 아는 것처럼 추측하지 마세요.
 코드 예시는 markdown 코드 블록으로 제공하세요.
 모든 대화는 평가 목적으로 기록됩니다."""
+
+# 참고 자료가 첨부된 문제에서만 도구 사용을 안내한다. 접근 경계는 참고 자료로 한정된다.
+REFERENCE_SYSTEM_SUFFIX = """
+
+이 문제에는 참고 자료 파일이 첨부되어 있습니다. list_reference_files 도구로 목록을 확인하고, read_reference_file 도구로 특정 파일의 내용을 열람할 수 있습니다.
+- 접근 가능한 것은 이 참고 자료 파일뿐입니다. 문제 지문·테스트 케이스·다른 파일에는 접근할 수 없습니다.
+- 응시자가 "3번 자료", "샘플 CSV" 등으로 자료를 가리키면 먼저 목록을 확인해 정확한 경로를 찾은 뒤 열람하세요.
+- 자료에 없는 외부 수치를 사실처럼 단정하지 말고, 열람한 자료를 근거로 도와주세요."""
+
+MAX_TOOL_ITERATIONS = 8
 
 
 class ChatError(Exception):
@@ -113,8 +124,15 @@ async def start_turn(
         if res is None or not res.configured:
             raise ChatError(503, "AI가 설정되지 않았습니다. 관리자에게 문의하세요 (관리자 콘솔 > 설정)")
 
-        # 제로 컨텍스트: problem_id는 대화 스레드 구분에만 쓰고 내용은 주입하지 않는다
+        # 제로 컨텍스트: 지문/내용은 주입하지 않는다. 단, 문제에 참고 자료가 있으면
+        # 그 자료만 열람할 수 있는 도구를 제공한다(접근 경계 = 이 문제의 참고 자료).
         system_text = SYSTEM_PROMPT
+        reference_files: list[dict] = []
+        if problem_id:
+            problem = await db.get(Problem, problem_id)
+            if problem and problem.reference_files:
+                reference_files = list(problem.reference_files)
+                system_text += REFERENCE_SYSTEM_SUFFIX
         history_q = (
             select(AiMessage)
             .where(AiMessage.attempt_id == attempt_id)
@@ -144,9 +162,64 @@ async def start_turn(
     handle = TurnHandle(attempt_id=attempt_id, req_id=req_id, problem_id=problem_id)
     _ACTIVE[attempt_id] = handle
     handle.task = asyncio.create_task(
-        _generate(handle, res, messages, system_text, user_msg_id, max_turns)
+        _generate(handle, res, messages, system_text, user_msg_id, max_turns, reference_files)
     )
     return handle
+
+
+async def _run_tool_loop(
+    handle: TurnHandle,
+    res: ai_provider.ResolvedAi,
+    messages: list[dict],
+    system_text: str,
+    reference_files: list[dict],
+) -> None:
+    """참고 자료 도구 루프 — 자료 열람 도구를 제공하며 최종 답변을 낸다.
+
+    스트리밍 대신 create_message(비스트리밍)을 반복하되, 각 단계의 텍스트는
+    delta로 흘려보내고, 도구 호출은 tool 이벤트로 알린다(경계는 참고 자료로 한정).
+    """
+    client = ai_provider.build_client(res)
+    for _ in range(MAX_TOOL_ITERATIONS):
+        response = await client.create_message(
+            model_config=ai_provider._model_config(res),
+            messages=messages,  # tool_use/tool_result 블록을 포함하므로 정제하지 않는다
+            system=system_text,
+            tools=REFERENCE_TOOLS,
+            purpose="harnesser.chat.reference",
+        )
+        text = (response.text or "").strip()
+        tool_calls = response.tool_calls
+
+        if text:
+            handle.buffer.append(text)
+            handle.publish({"type": "delta", "req_id": handle.req_id, "text": text})
+
+        if not tool_calls:
+            messages.append({"role": "assistant", "content": text or "(응답 없음)"})
+            return
+
+        assistant_content: list[dict] = []
+        if text:
+            assistant_content.append({"type": "text", "text": text})
+        for b in tool_calls:
+            assistant_content.append(
+                {"type": "tool_use", "id": b.tool_use_id, "name": b.tool_name, "input": b.tool_input or {}}
+            )
+        messages.append({"role": "assistant", "content": assistant_content})
+
+        results = []
+        for b in tool_calls:
+            result = execute_reference_tool(b.tool_name, b.tool_input or {}, reference_files)
+            detail = str((b.tool_input or {}).get("path", "")) if b.tool_name == "read_reference_file" else "목록"
+            handle.publish(
+                {"type": "tool", "req_id": handle.req_id, "name": b.tool_name, "detail": detail}
+            )
+            results.append({"type": "tool_result", "tool_use_id": b.tool_use_id, "content": str(result)[:24000]})
+        messages.append({"role": "user", "content": results})
+
+    handle.buffer.append("\n\n(자료 열람 한도에 도달해 이번 답변을 마칩니다.)")
+    messages.append({"role": "assistant", "content": "(도구 호출 한도 도달)"})
 
 
 async def _generate(
@@ -156,12 +229,16 @@ async def _generate(
     system_text: str,
     user_msg_id: uuid.UUID,
     max_turns: int,
+    reference_files: list[dict],
 ) -> None:
     error: str | None = None
     try:
-        async for delta in ai_provider.stream_text(res, messages, system=system_text):
-            handle.buffer.append(delta)
-            handle.publish({"type": "delta", "req_id": handle.req_id, "text": delta})
+        if reference_files:
+            await _run_tool_loop(handle, res, messages, system_text, reference_files)
+        else:
+            async for delta in ai_provider.stream_text(res, messages, system=system_text):
+                handle.buffer.append(delta)
+                handle.publish({"type": "delta", "req_id": handle.req_id, "text": delta})
     except asyncio.CancelledError:
         handle.cancelled = True
     except Exception as e:  # noqa: BLE001 — 오류를 봉투로 전달

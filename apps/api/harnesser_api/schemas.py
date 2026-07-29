@@ -84,6 +84,7 @@ class ProblemIn(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     statement_md: str = ""
     difficulty: Literal["easy", "medium", "hard"] = "medium"
+    deliverable: Literal["code", "report"] = "code"
     time_limit_ms: int = Field(default=2000, ge=100, le=30000)
     memory_limit_mb: int = Field(default=256, ge=16, le=2048)
     starter_code: dict[str, str] = {}
@@ -97,6 +98,7 @@ class ProblemOut(BaseModel):
     title: str
     statement_md: str
     difficulty: str
+    deliverable: str = "code"
     time_limit_ms: int
     memory_limit_mb: int
     starter_code: dict[str, str]
@@ -244,6 +246,7 @@ class AttemptProblemOut(BaseModel):
     title: str
     statement_md: str
     difficulty: str
+    deliverable: str = "code"
     time_limit_ms: int
     memory_limit_mb: int
     starter_code: dict[str, str]
@@ -265,6 +268,11 @@ class AttemptOut(BaseModel):
     deadline_at: datetime
     remaining_seconds: int
     problems: list[AttemptProblemOut] = []
+
+
+class ReportSubmitIn(BaseModel):
+    problem_id: uuid.UUID
+    content: str = ""
 
 
 class StateIn(BaseModel):

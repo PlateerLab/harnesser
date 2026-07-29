@@ -42,6 +42,8 @@ class Problem(Base):
     title: Mapped[str] = mapped_column(String(200))
     statement_md: Mapped[str] = mapped_column(Text, default="")
     difficulty: Mapped[str] = mapped_column(String(20), default="medium")  # easy | medium | hard
+    # 제출 형식: code(테스트 채점) | report(마크다운 보고서, 루브릭·AI 평가)
+    deliverable: Mapped[str] = mapped_column(String(20), default="code")
     time_limit_ms: Mapped[int] = mapped_column(Integer, default=2000)
     memory_limit_mb: Mapped[int] = mapped_column(Integer, default=256)
     starter_code: Mapped[dict] = mapped_column(JSONB, default=dict)  # {language: code}

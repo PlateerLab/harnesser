@@ -400,7 +400,17 @@ function OverviewTab({
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    {p.best_verdict ? (
+                    {p.deliverable === "report" ? (
+                      p.report_submitted ? (
+                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                          보고서 제출됨
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-600">
+                          미제출
+                        </span>
+                      )
+                    ) : p.best_verdict ? (
                       <Badge value={p.best_verdict} label={VERDICT_LABEL[p.best_verdict]} />
                     ) : (
                       <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-600">
@@ -615,15 +625,28 @@ function ExecutionsList({
             </span>
             <span className="font-medium">{problemTitles[ex.problem_id]}</span>
             <span className="text-slate-500">{ex.language}</span>
+            {ex.language === "report" && (
+              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                보고서
+              </span>
+            )}
             {ex.verdict && <Badge value={ex.verdict} label={VERDICT_LABEL[ex.verdict]} />}
             {ex.score != null && <span className="font-bold">{ex.score}점</span>}
-            <span className="ml-auto text-xs text-slate-400">{openId === ex.id ? "접기" : "코드/결과 보기"}</span>
+            <span className="ml-auto text-xs text-slate-400">
+              {openId === ex.id ? "접기" : ex.language === "report" ? "보고서 보기" : "코드/결과 보기"}
+            </span>
           </div>
           {openId === ex.id && (
             <div className="mt-4 space-y-3">
-              <div className="h-64 overflow-hidden rounded-lg border border-slate-800">
-                <CodeEditor language={ex.language} value={ex.code} readOnly />
-              </div>
+              {ex.language === "report" ? (
+                <div className="max-h-[600px] overflow-auto rounded-lg border border-slate-200 p-5">
+                  <Markdown>{ex.code}</Markdown>
+                </div>
+              ) : (
+                <div className="h-64 overflow-hidden rounded-lg border border-slate-800">
+                  <CodeEditor language={ex.language} value={ex.code} readOnly />
+                </div>
+              )}
               {ex.compile_output && (
                 <pre className="max-h-40 overflow-auto rounded-lg bg-slate-900 p-3 text-xs text-amber-200">
                   {ex.compile_output}

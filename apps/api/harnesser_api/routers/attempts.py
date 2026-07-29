@@ -371,6 +371,7 @@ async def _attempt_out(attempt: Attempt, db: AsyncSession) -> AttemptOut:
                 title=p.title,
                 statement_md=p.statement_md,
                 difficulty=p.difficulty,
+                deliverable=p.deliverable,
                 time_limit_ms=p.time_limit_ms,
                 memory_limit_mb=p.memory_limit_mb,
                 starter_code=p.starter_code or {},

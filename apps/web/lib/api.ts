@@ -45,6 +45,7 @@ export async function streamAiChat(
     onDelta: (text: string) => void;
     onDone: () => void;
     onError: (message: string) => void;
+    onTool?: (name: string, detail: string) => void;
   },
 ): Promise<void> {
   const res = await fetch(`/api/attempts/${attemptId}/ai/chat`, {
@@ -78,6 +79,7 @@ export async function streamAiChat(
       try {
         const data = JSON.parse(line.slice(5).trim());
         if (data.delta) handlers.onDelta(data.delta);
+        if (data.tool) handlers.onTool?.(data.tool.name, data.tool.detail ?? "");
         if (data.error) handlers.onError(data.error);
         if (data.done) handlers.onDone();
       } catch {

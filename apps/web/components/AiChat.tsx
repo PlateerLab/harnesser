@@ -25,8 +25,12 @@ export function AiChat({ attemptId, problemId }: { attemptId: string; problemId:
   const [busy, setBusy] = useState(false);
   const [usage, setUsage] = useState<AiUsage | null>(null);
   const [conn, setConn] = useState<ConnState>("connecting");
+  const [toolNote, setToolNote] = useState<string | null>(null); // "자료 열람 중" 표시
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const noteFromTool = (name: string, detail: string) =>
+    name === "read_reference_file" ? `자료 열람: ${detail}` : "자료 목록 확인";
 
   // 내용에 맞춰 입력창 높이 자동 조절 (최대 160px)
   const autoGrow = (el: HTMLTextAreaElement) => {
@@ -190,7 +194,11 @@ export function AiChat({ attemptId, problemId }: { attemptId: string; problemId:
           case "delta":
             appendDelta(ev.req_id as string, ev.text as string);
             break;
+          case "tool":
+            setToolNote(noteFromTool(ev.name as string, (ev.detail as string) ?? ""));
+            break;
           case "turn_end": {
+            setToolNote(null);
             finalizeStream(ev.error as string | null, ev.cancelled as boolean);
             const u = ev.usage as { used: number; max: number; remaining: number } | null;
             if (u) setUsage((prev) => (prev ? { ...prev, ...u } : prev));
@@ -293,8 +301,10 @@ export function AiChat({ attemptId, problemId }: { attemptId: string; problemId:
       { problem_id: problemId, content },
       {
         onDelta: (t) => appendDelta("sse", t),
+        onTool: (name, detail) => setToolNote(noteFromTool(name, detail)),
         onError: (msg) => appendDelta("sse", `\n\n> 오류: ${msg}`),
         onDone: () => {
+          setToolNote(null);
           finalizeStream();
           refreshUsage();
         },
@@ -369,7 +379,12 @@ export function AiChat({ attemptId, problemId }: { attemptId: string; problemId:
                   {m.content ? (
                     <Markdown dark>{m.content}</Markdown>
                   ) : (
-                    <span className="text-slate-400">{m.streaming ? "생각 중..." : ""}</span>
+                    <span className="flex items-center gap-2 text-slate-400">
+                      {m.streaming && (
+                        <span className="h-3 w-3 animate-spin rounded-full border-2 border-slate-600 border-t-slate-300" />
+                      )}
+                      {m.streaming ? toolNote ?? "생각 중..." : ""}
+                    </span>
                   )}
                   {m.streaming && m.content && <span className="animate-pulse text-violet-400">▍</span>}
                 </div>

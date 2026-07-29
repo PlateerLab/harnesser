@@ -35,6 +35,7 @@ MIGRATIONS = [
     # 문제 확장 콘텐츠: 참고 자료 + 채점 기준
     "ALTER TABLE problems ADD COLUMN IF NOT EXISTS reference_files JSONB NOT NULL DEFAULT '[]'::jsonb",
     "ALTER TABLE problems ADD COLUMN IF NOT EXISTS grading_criteria JSONB NOT NULL DEFAULT '{}'::jsonb",
+    "ALTER TABLE problems ADD COLUMN IF NOT EXISTS deliverable VARCHAR(20) NOT NULL DEFAULT 'code'",
 ]
 
 

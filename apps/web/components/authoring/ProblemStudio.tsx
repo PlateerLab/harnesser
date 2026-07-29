@@ -148,6 +148,7 @@ const EMPTY: Draft = {
   title: "",
   statement_md: STATEMENT_TEMPLATE,
   difficulty: "medium",
+  deliverable: "code",
   time_limit_ms: 2000,
   memory_limit_mb: 256,
   starter_code: { ...STARTER_TEMPLATE },
@@ -395,6 +396,28 @@ export function ProblemStudio({ initial, problemId }: { initial?: Problem; probl
             <div>
               {tab === "basic" && (
                 <Card className="space-y-4 p-6">
+                  <Field label="제출 형식" hint="코드 = 테스트 채점 / 보고서 = 마크다운 산출물(루브릭·AI 평가)">
+                    <div className="flex gap-2">
+                      {(
+                        [
+                          ["code", "코드 (테스트 채점)"],
+                          ["report", "보고서 (마크다운)"],
+                        ] as const
+                      ).map(([val, label]) => (
+                        <button
+                          key={val}
+                          onClick={() => set("deliverable", val)}
+                          className={`whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition ${
+                            form.deliverable === val
+                              ? "bg-slate-900 text-white"
+                              : "border border-slate-300 text-slate-600 hover:bg-slate-50"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </Field>
                   <Field label="제목">
                     <input
                       className={inputCls}

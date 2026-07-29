@@ -53,6 +53,7 @@ export interface Problem {
   title: string;
   statement_md: string;
   difficulty: "easy" | "medium" | "hard";
+  deliverable: "code" | "report";
   time_limit_ms: number;
   memory_limit_mb: number;
   starter_code: Record<string, string>;
@@ -190,6 +191,7 @@ export interface AttemptProblem {
   difficulty: string;
   time_limit_ms: number;
   memory_limit_mb: number;
+  deliverable: "code" | "report";
   starter_code: Record<string, string>;
   reference_files: ReferenceFile[];
   grading_criteria: Partial<GradingCriteria>;
@@ -315,10 +317,13 @@ export interface ReviewDetail {
     id: string;
     title: string;
     difficulty: string;
+    deliverable?: "code" | "report";
     points: number;
     statement_md: string;
     best_score: number | null;
     best_verdict: string | null;
+    report_submitted?: boolean;
+    report_content?: string | null;
     final_language: string | null;
     final_code: string | null;
     test_cases: {

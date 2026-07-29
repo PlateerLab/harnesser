@@ -9,12 +9,81 @@ from ..db import get_db
 from ..deps import get_current_user
 from ..judge.queue import enqueue_execution
 from ..models import AssessmentProblem, Event, Execution, Problem, TestCase, User
-from ..schemas import LANGUAGES, ExecutionIn, ExecutionOut, ExecutionSummary, TestResultOut
+from ..models import utcnow
+from ..schemas import (
+    LANGUAGES,
+    ExecutionIn,
+    ExecutionOut,
+    ExecutionSummary,
+    ReportSubmitIn,
+    TestResultOut,
+)
 from .attempts import get_attempt_for
 
 router = APIRouter(tags=["executions"])
 
 MAX_PENDING = 3  # 시도당 동시 대기 실행 수 제한
+
+
+@router.post("/attempts/{attempt_id}/report", response_model=ExecutionOut)
+async def submit_report(
+    attempt_id: uuid.UUID,
+    body: ReportSubmitIn,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """보고서(report) 제출 — 채점 없이 마크다운 산출물을 확정 기록한다.
+
+    코드 문제의 채점 큐를 타지 않고, 즉시 완료 상태의 제출 레코드를 만든다.
+    실제 평가는 루브릭 + LLM 자동평가 + 평가자가 담당한다.
+    """
+    attempt = await get_attempt_for(attempt_id, user, db)
+    if attempt.user_id != user.id:
+        raise HTTPException(403, "본인의 응시에서만 제출할 수 있습니다")
+    if attempt.status != "in_progress":
+        raise HTTPException(400, "이미 종료된 시험입니다")
+    problem = await db.get(Problem, body.problem_id)
+    if not problem or problem.deliverable != "report":
+        raise HTTPException(400, "보고서 제출 대상 문제가 아닙니다")
+    in_assessment = (
+        await db.execute(
+            select(AssessmentProblem).where(
+                AssessmentProblem.assessment_id == attempt.assessment_id,
+                AssessmentProblem.problem_id == body.problem_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if not in_assessment:
+        raise HTTPException(400, "이 시험에 포함되지 않은 문제입니다")
+    content = (body.content or "").strip()
+    if not content:
+        raise HTTPException(400, "제출할 내용이 없습니다")
+
+    execution = Execution(
+        attempt_id=attempt_id,
+        problem_id=body.problem_id,
+        user_id=user.id,
+        kind="submit",
+        language="report",
+        code=content[: settings.max_code_bytes],
+        status="done",
+        verdict=None,
+        score=None,
+        results=[],
+        finished_at=utcnow(),
+    )
+    db.add(execution)
+    await db.flush()
+    db.add(
+        Event(
+            attempt_id=attempt_id,
+            problem_id=body.problem_id,
+            type="report_submitted",
+            payload={"execution_id": str(execution.id), "chars": len(content)},
+        )
+    )
+    await db.commit()
+    return await _execution_out(execution, user, db)
 
 
 @router.post("/attempts/{attempt_id}/executions", response_model=ExecutionOut)

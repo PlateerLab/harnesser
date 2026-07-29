@@ -137,6 +137,8 @@ async def update_assessment(
     # 기존 배정 중 빠진 사용자만 제거 (응시 이력 보존을 위해 남은 배정은 유지)
     keep = set(body.assignee_ids)
     a.assignments[:] = [asg for asg in a.assignments if asg.user_id in keep]
+    # 삭제(clear)를 먼저 DB에 반영 — 이후 재추가 시 (assessment,problem) 유니크 위반 방지
+    await db.flush()
     await _apply_relations(a, body, db, existing_user_ids={asg.user_id for asg in a.assignments})
     await db.commit()
     return await _to_out(await _load(assessment_id, db), db)

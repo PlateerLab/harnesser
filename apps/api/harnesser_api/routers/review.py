@@ -156,18 +156,26 @@ async def attempt_detail(attempt_id: uuid.UUID, db: AsyncSession = Depends(get_d
         p = ap.problem
         submits = [e for e in executions if e.problem_id == p.id and e.kind == "submit" and e.score is not None]
         best = max(submits, key=lambda e: e.score, default=None)
+        # 보고서 문제는 채점 점수가 없으므로 '제출 여부'로 상태를 판단
+        report_submits = [
+            e for e in executions if e.problem_id == p.id and e.kind == "submit" and e.language == "report"
+        ]
+        report_submit = max(report_submits, key=lambda e: e.created_at, default=None)
         state = state_by_problem.get(p.id)
         problems.append(
             {
                 "id": str(p.id),
                 "title": p.title,
                 "difficulty": p.difficulty,
+                "deliverable": p.deliverable,
                 "points": ap.points,
                 "statement_md": p.statement_md,
                 "best_score": best.score if best else None,
                 "best_verdict": best.verdict if best else None,
+                "report_submitted": report_submit is not None,
+                "report_content": report_submit.code if report_submit else None,
                 "final_language": state.language if state else None,
-                "final_code": state.code if state else None,
+                "final_code": (report_submit.code if report_submit else (state.code if state else None)),
                 "test_cases": [
                     {
                         "id": str(tc.id),

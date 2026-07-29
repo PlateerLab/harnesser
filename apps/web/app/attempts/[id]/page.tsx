@@ -162,8 +162,8 @@ export default function AttemptPage({ params }: { params: Promise<{ id: string }
         }
         const init: CodeState = {};
         for (const p of a.problems) {
-          const lang = (p.saved_language as Language) || "python";
-          // 우선순위: 언어별 저장분 > 마지막 스냅샷 > 시작 코드
+          // 보고서 문제는 언어 대신 "report" 슬롯에 마크다운을 보관한다
+          const lang = (p.deliverable === "report" ? "report" : p.saved_language || "python") as Language;
           const codeByLang: Record<string, string> = {
             ...p.starter_code,
             ...(p.saved_code_by_lang || {}),
@@ -482,6 +482,31 @@ export default function AttemptPage({ params }: { params: Promise<{ id: string }
     [attempt, activeIdx, attemptId, busy, poll, snapshot, saveState, toast, confirm],
   );
 
+  // 보고서 제출 (report 문제) — 채점 없이 마크다운 산출물 확정
+  const submitReport = useCallback(async () => {
+    if (!attempt || busy) return;
+    const p = attempt.problems[activeIdx];
+    const st = codeStateRef.current[p.id];
+    const content = st.codeByLang["report"] ?? "";
+    if (!content.trim()) {
+      toast("보고서 내용을 작성해주세요.", "info");
+      return;
+    }
+    if (!(await confirm({ title: "보고서를 제출할까요?", message: "제출 후에도 수정·재제출할 수 있습니다.", confirmLabel: "제출" }))) return;
+    setBusy(true);
+    snapshot(p.id, true);
+    saveState(p.id, true);
+    try {
+      const ex = await api.post<Execution>(`/attempts/${attemptId}/report`, { problem_id: p.id, content });
+      setExecutions((prev) => ({ ...prev, [p.id]: ex }));
+      toast("보고서를 제출했습니다.", "success");
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : "제출 실패", "error");
+    } finally {
+      setBusy(false);
+    }
+  }, [attempt, activeIdx, attemptId, busy, snapshot, saveState, toast, confirm]);
+
   // ── 종료 ──────────────────────────────────────────────────
   const openFinishModal = useCallback(async () => {
     setSubmitStatus(null);
@@ -516,6 +541,7 @@ export default function AttemptPage({ params }: { params: Promise<{ id: string }
   const problem = attempt.problems[activeIdx];
   const st = codeState[problem.id];
   const isAi = attempt.mode === "ai_assisted";
+  const isReport = problem.deliverable === "report";
   const refFiles = problem.reference_files ?? [];
   const gc = problem.grading_criteria ?? {};
   const hasGrading = (gc.process?.length ?? 0) > 0 || (gc.result?.length ?? 0) > 0;
@@ -712,6 +738,22 @@ export default function AttemptPage({ params }: { params: Promise<{ id: string }
             <div className="min-h-0 flex-1 overflow-hidden">
               <Viewer file={activeRefFile} theme="dark" />
             </div>
+          ) : isReport ? (
+            /* 보고서(마크다운) 작성 — 채점 없이 제출 */
+            <ReportEditor
+              value={st.codeByLang["report"] ?? ""}
+              onChange={(md) => {
+                setCodeState((prev) => ({
+                  ...prev,
+                  [problem.id]: { ...prev[problem.id], codeByLang: { ...prev[problem.id].codeByLang, report: md } },
+                }));
+                scheduleStateSave(problem.id);
+              }}
+              onPaste={(text) => record("paste", problem.id, { chars: text.length, text: text.slice(0, 10000) })}
+              onSubmit={submitReport}
+              submitted={executions[problem.id]?.language === "report"}
+              busy={busy}
+            />
           ) : (
             /* 코드 에디터 + 실행 결과 */
             <>
@@ -801,6 +843,65 @@ export default function AttemptPage({ params }: { params: Promise<{ id: string }
         />
       )}
     </div>
+  );
+}
+
+/** 보고서 작성 에디터 (다크) — 마크다운 편집/미리보기 + 제출 */
+function ReportEditor({
+  value,
+  onChange,
+  onPaste,
+  onSubmit,
+  submitted,
+  busy,
+}: {
+  value: string;
+  onChange: (md: string) => void;
+  onPaste: (text: string) => void;
+  onSubmit: () => void;
+  submitted: boolean;
+  busy: boolean;
+}) {
+  const [preview, setPreview] = useState(false);
+  return (
+    <>
+      <div className="flex h-11 shrink-0 items-center justify-between border-b border-slate-700 px-3">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-slate-300">결과물 (Markdown)</span>
+          {submitted && (
+            <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-semibold text-emerald-300">
+              제출됨
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setPreview((v) => !v)}
+            className="whitespace-nowrap rounded-lg border border-slate-600 px-3 py-1 text-sm text-slate-300 hover:bg-slate-800"
+          >
+            {preview ? "편집" : "미리보기"}
+          </button>
+          <button
+            onClick={onSubmit}
+            disabled={busy}
+            className="whitespace-nowrap rounded-lg bg-emerald-600 px-4 py-1 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-40"
+          >
+            {submitted ? "재제출" : "제출"}
+          </button>
+        </div>
+      </div>
+      <div className="min-h-0 flex-1">
+        {preview ? (
+          <div className="dark-scroll h-full overflow-auto bg-slate-900 p-6">
+            <div className="mx-auto max-w-3xl">
+              <Markdown dark>{value || "_(작성한 내용이 여기에 미리보기로 표시됩니다)_"}</Markdown>
+            </div>
+          </div>
+        ) : (
+          <CodeEditor language="markdown" value={value} onChange={onChange} onPaste={onPaste} />
+        )}
+      </div>
+    </>
   );
 }
 
@@ -895,7 +996,11 @@ function FinishModal({
                     {i + 1}. {p.title}
                   </span>
                   {best ? (
-                    best.status === "done" ? (
+                    best.language === "report" ? (
+                      <span className="shrink-0 rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-semibold text-emerald-300">
+                        제출됨
+                      </span>
+                    ) : best.status === "done" ? (
                       <span className="flex shrink-0 items-center gap-2 text-xs">
                         <Badge value={best.verdict ?? "IE"} label={VERDICT_LABEL[best.verdict ?? "IE"]} />
                         {best.score != null && (

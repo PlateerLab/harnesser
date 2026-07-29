@@ -39,6 +39,7 @@ async def create_problem(body: ProblemIn, db: AsyncSession = Depends(get_db), us
         title=body.title,
         statement_md=body.statement_md,
         difficulty=body.difficulty,
+        deliverable=body.deliverable,
         time_limit_ms=body.time_limit_ms,
         memory_limit_mb=body.memory_limit_mb,
         starter_code=body.starter_code,
@@ -74,6 +75,7 @@ async def update_problem(
     problem.title = body.title
     problem.statement_md = body.statement_md
     problem.difficulty = body.difficulty
+    problem.deliverable = body.deliverable
     problem.time_limit_ms = body.time_limit_ms
     problem.memory_limit_mb = body.memory_limit_mb
     problem.starter_code = body.starter_code

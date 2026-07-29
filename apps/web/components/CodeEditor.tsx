@@ -13,6 +13,7 @@ const MONACO_LANG: Record<string, string> = {
   cpp: "cpp",
   java: "java",
   go: "go",
+  markdown: "markdown",
 };
 
 export function CodeEditor({

@@ -80,20 +80,36 @@ class Handler(BaseHTTPRequestHandler):
             last_text = str(last_user.get("content", ""))
             if req.get("tools"):
                 last = msgs[-1] if msgs else {}
-                if last.get("role") == "tool":
-                    return self._json(
-                        self._text_resp(model, now, "도구 결과 확인: " + str(last.get("content", ""))[:80])
-                    )
+                tool_content = str(last.get("content", "")) if last.get("role") == "tool" else ""
+                # 참고자료 시나리오 — 도구 결과(tool_content) 분기를 먼저 처리
+                if "IndexError" in tool_content:  # 파일 내용을 읽은 뒤 → 최종 답변
+                    return self._json(self._text_resp(model, now, "로그 확인 완료: 빈 아이템으로 인한 IndexError로 보입니다."))
+                if tool_content.startswith("["):  # 파일 목록을 받은 뒤 → 특정 파일 열람
+                    return self._json(self._named_tool_resp(model, now, "read_reference_file", {"path": "logs/server_error.log"}))
+                if "자료봐줘" in last_text:
+                    return self._json(self._named_tool_resp(model, now, "list_reference_files", {}))
                 if "검증테스트" in last_text:
                     return self._json(self._tool_resp(model, now, {"statement_md": 123}))
                 if "도구테스트" in last_text:
                     return self._json(self._tool_resp(model, now, {"statement_md": "## 문제\n\n모의 지문입니다."}))
+                if last.get("role") == "tool":
+                    return self._json(self._text_resp(model, now, "도구 결과 확인: " + tool_content[:80]))
             self._json(self._text_resp(model, now, REPLY))
 
     def _text_resp(self, model, now, text):
         return {
             "id": "chatcmpl-mock", "object": "chat.completion", "created": now, "model": model,
             "choices": [{"index": 0, "message": {"role": "assistant", "content": text}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 8, "total_tokens": 18},
+        }
+
+    def _named_tool_resp(self, model, now, tool_name, args):
+        return {
+            "id": "chatcmpl-mock", "object": "chat.completion", "created": now, "model": model,
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": None, "tool_calls": [
+                {"id": "call_ref", "type": "function",
+                 "function": {"name": tool_name, "arguments": json.dumps(args, ensure_ascii=False)}}
+            ]}, "finish_reason": "tool_calls"}],
             "usage": {"prompt_tokens": 10, "completion_tokens": 8, "total_tokens": 18},
         }
 
