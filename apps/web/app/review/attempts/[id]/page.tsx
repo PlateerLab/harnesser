@@ -120,6 +120,11 @@ export default function ReviewAttemptPage({ params }: { params: Promise<{ id: st
           <span>{detail.assessment.title}</span>
           <Badge value={detail.assessment.mode} label={detail.assessment.mode === "ai_assisted" ? "AI 활용" : "일반"} />
           <Badge value={detail.attempt.status} label={STATUS_LABEL[detail.attempt.status]} />
+          {detail.attempt.superseded && (
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500">
+              재응시 이전 기록
+            </span>
+          )}
           <span>
             {fmtDateTime(detail.attempt.started_at)} 시작 · {fmtDuration(stats.durationS)} 소요
           </span>

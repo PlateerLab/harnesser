@@ -17,11 +17,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import settings
 from ..db import SessionLocal
-from ..models import AiMessage, Assessment, Attempt, Event, Problem
+from ..models import AiMessage, Assessment, Attempt, Event
 from . import provider as ai_provider
 
+# 제로 컨텍스트 원칙: 시스템은 시험/문제/코드에 대한 어떤 정보도 주입하지 않는다.
+# 에이전트는 응시자가 채팅으로 직접 제공한 내용만 알 수 있다.
 SYSTEM_PROMPT = """당신은 코딩 테스트 응시자를 돕는 AI 어시스턴트입니다.
-응시자가 문제를 이해하고, 접근 방법을 설계하고, 코드를 작성하는 것을 자유롭게 도와주세요.
+당신에게는 시험이나 문제에 대한 어떤 정보도 제공되지 않습니다 — 응시자가 대화에 직접 붙여넣거나 설명한 내용만 알 수 있으며, 모르는 내용을 아는 것처럼 추측하지 마세요.
 코드 예시는 markdown 코드 블록으로 제공하세요.
 모든 대화는 평가 목적으로 기록됩니다."""
 
@@ -111,11 +113,8 @@ async def start_turn(
         if res is None or not res.configured:
             raise ChatError(503, "AI가 설정되지 않았습니다. 관리자에게 문의하세요 (관리자 콘솔 > 설정)")
 
+        # 제로 컨텍스트: problem_id는 대화 스레드 구분에만 쓰고 내용은 주입하지 않는다
         system_text = SYSTEM_PROMPT
-        if problem_id:
-            problem = await db.get(Problem, problem_id)
-            if problem:
-                system_text += f"\n\n현재 문제: {problem.title}\n\n{problem.statement_md[:6000]}"
         history_q = (
             select(AiMessage)
             .where(AiMessage.attempt_id == attempt_id)

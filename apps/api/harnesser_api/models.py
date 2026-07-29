@@ -123,13 +123,15 @@ class Assignment(Base):
 
 
 class Attempt(Base):
+    """응시 — 재응시 시 이전 시도는 삭제하지 않고 superseded로 표시해 기록을 보존한다."""
+
     __tablename__ = "attempts"
-    __table_args__ = (UniqueConstraint("assessment_id", "user_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     assessment_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("assessments.id", ondelete="CASCADE"), index=True)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     status: Mapped[str] = mapped_column(String(20), default="in_progress")  # in_progress | submitted | expired
+    superseded: Mapped[bool] = mapped_column(Boolean, default=False)  # 재응시로 대체된 이전 기록
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     deadline_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

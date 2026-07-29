@@ -73,6 +73,11 @@ function ReviewList() {
                         체험
                       </span>
                     )}
+                    {r.superseded && (
+                      <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">
+                        재응시 이전 기록
+                      </span>
+                    )}
                   </div>
                   <div className="text-xs text-slate-400">{r.candidate_email}</div>
                 </div>

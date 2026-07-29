@@ -39,11 +39,10 @@ export default function DashboardPage() {
 
   const retake = async (a: MyAssignment) => {
     if (!a.attempt_id) return;
-    if (!confirm("기존 응시 기록(이벤트/제출/AI 대화/평가)을 모두 삭제하고 다시 응시합니다. 계속할까요?")) return;
+    if (!confirm("다시 응시합니다. 이전 응시 기록은 삭제되지 않고 리뷰에 '재응시 이전 기록'으로 보존됩니다.")) return;
     setBusyId(a.assessment_id);
     try {
-      await api.del(`/attempts/${a.attempt_id}`);
-      const attempt = await api.post<Attempt>(`/assessments/${a.assessment_id}/attempts`);
+      const attempt = await api.post<Attempt>(`/attempts/${a.attempt_id}/retake`);
       router.push(`/attempts/${attempt.id}`);
     } catch (e) {
       alert(e instanceof ApiError ? e.message : "다시 응시할 수 없습니다");
@@ -82,7 +81,7 @@ export default function DashboardPage() {
       {isStaff && (
         <div className="mb-6 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-800">
           <b>스태프 미리보기 모드</b> — 배정 여부와 관계없이 모든 시험을 응시자와 동일한 화면에서 체험할 수 있고,
-          완료한 응시는 <b>다시 응시</b>로 초기화할 수 있습니다. 체험 응시는 리뷰 목록에 <b>체험</b> 배지로 표시됩니다.
+          완료한 응시는 <b>다시 응시</b>할 수 있으며, 이전 기록은 삭제되지 않고 리뷰에 보존됩니다. 체험 응시는 리뷰 목록에 <b>체험</b> 배지로 표시됩니다.
         </div>
       )}
 
@@ -133,7 +132,7 @@ export default function DashboardPage() {
                             결과 리뷰
                           </Link>
                           <Button variant="secondary" onClick={() => retake(a)} disabled={busy}>
-                            {busy ? "초기화 중..." : "다시 응시"}
+                            {busy ? "시작 중..." : "다시 응시"}
                           </Button>
                         </>
                       ) : (

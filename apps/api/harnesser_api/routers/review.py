@@ -99,6 +99,7 @@ async def list_attempts(
                 ai_message_count=ai_count,
                 has_auto_eval=has_auto > 0,
                 is_staff=at.user.role != "candidate",
+                superseded=at.superseded,
             )
         )
     return rows
@@ -185,6 +186,7 @@ async def attempt_detail(attempt_id: uuid.UUID, db: AsyncSession = Depends(get_d
         "attempt": {
             "id": str(attempt.id),
             "status": attempt.status,
+            "superseded": attempt.superseded,
             "started_at": attempt.started_at.isoformat(),
             "deadline_at": attempt.deadline_at.isoformat(),
             "submitted_at": attempt.submitted_at.isoformat() if attempt.submitted_at else None,

@@ -29,6 +29,9 @@ MIGRATIONS = [
     "ALTER TABLE assessments ADD COLUMN IF NOT EXISTS ai_max_turns INTEGER NOT NULL DEFAULT 20",
     "ALTER TABLE attempt_problem_states ADD COLUMN IF NOT EXISTS code_by_lang JSONB NOT NULL DEFAULT '{}'::jsonb",
     "ALTER TABLE assessments ADD COLUMN IF NOT EXISTS ai_provider_id UUID REFERENCES ai_providers(id) ON DELETE SET NULL",
+    # 재응시 기록 보존: 시도당 1개 제약 해제 + superseded 플래그
+    "ALTER TABLE attempts ADD COLUMN IF NOT EXISTS superseded BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE attempts DROP CONSTRAINT IF EXISTS attempts_assessment_id_user_id_key",
 ]
 
 

@@ -36,7 +36,11 @@ async def _load(assessment_id: uuid.UUID, db: AsyncSession) -> Assessment:
 
 async def _to_out(a: Assessment, db: AsyncSession) -> AssessmentOut:
     attempts = (
-        await db.execute(select(Attempt).where(Attempt.assessment_id == a.id))
+        await db.execute(
+            select(Attempt)
+            .where(Attempt.assessment_id == a.id, Attempt.superseded.is_(False))
+            .order_by(Attempt.started_at)
+        )
     ).scalars().all()
     attempt_by_user = {at.user_id: at for at in attempts}
     return AssessmentOut(

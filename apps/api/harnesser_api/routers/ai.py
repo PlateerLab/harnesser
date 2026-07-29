@@ -12,7 +12,7 @@ from ..ai.chat_service import SYSTEM_PROMPT, used_turns
 from ..config import settings
 from ..db import SessionLocal, get_db
 from ..deps import get_current_user
-from ..models import AiMessage, Assessment, Event, Problem, User
+from ..models import AiMessage, Assessment, Event, User
 from ..schemas import AiChatIn, AiMessageOut
 from .attempts import get_attempt_for
 
@@ -87,12 +87,8 @@ async def chat(
     if res is None or not res.configured:
         raise HTTPException(503, "AI가 설정되지 않았습니다. 관리자에게 문의하세요 (관리자 콘솔 > 설정)")
 
-    # 컨텍스트 구성: 시스템(지침+문제 지문) + 이전 대화 + 새 메시지
+    # 제로 컨텍스트: 시스템은 문제 정보를 주입하지 않는다 (스레드 구분에만 problem_id 사용)
     system_text = SYSTEM_PROMPT
-    if body.problem_id:
-        problem = await db.get(Problem, body.problem_id)
-        if problem:
-            system_text += f"\n\n현재 문제: {problem.title}\n\n{problem.statement_md[:6000]}"
     messages: list[dict] = []
     history_q = (
         select(AiMessage)

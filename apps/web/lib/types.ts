@@ -271,12 +271,14 @@ export interface ReviewAttemptRow {
   ai_message_count: number;
   has_auto_eval: boolean;
   is_staff: boolean;
+  superseded: boolean;
 }
 
 export interface ReviewDetail {
   attempt: {
     id: string;
     status: string;
+    superseded?: boolean;
     started_at: string;
     deadline_at: string;
     submitted_at: string | null;

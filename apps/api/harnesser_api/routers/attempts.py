@@ -86,11 +86,16 @@ async def my_assignments(user: User = Depends(get_current_user), db: AsyncSessio
         ]
 
     attempts = (
-        await db.execute(select(Attempt).where(Attempt.user_id == user.id))
+        await db.execute(
+            select(Attempt).where(Attempt.user_id == user.id).order_by(Attempt.started_at)
+        )
     ).scalars().all()
     for at in attempts:
         await check_expired(at, db)
-    attempt_by_assessment = {at.assessment_id: at for at in attempts}
+    # 재응시로 대체된 기록은 제외하고, 활성(최신) 시도만 대시보드에 노출
+    attempt_by_assessment = {
+        at.assessment_id: at for at in attempts if not at.superseded
+    }
     out = []
     for a in assessments:
         at = attempt_by_assessment.get(a.id)
@@ -137,7 +142,14 @@ async def start_attempt(
 
     existing = (
         await db.execute(
-            select(Attempt).where(Attempt.assessment_id == assessment_id, Attempt.user_id == user.id)
+            select(Attempt)
+            .where(
+                Attempt.assessment_id == assessment_id,
+                Attempt.user_id == user.id,
+                Attempt.superseded.is_(False),
+            )
+            .order_by(Attempt.started_at.desc())
+            .limit(1)
         )
     ).scalar_one_or_none()
     if existing:
@@ -215,6 +227,52 @@ async def save_state(
     await _upsert_state(attempt.id, body.problem_id, body.language, code_by_lang, db)
     await db.commit()
     return {"ok": True, "saved": True}
+
+
+@router.post("/attempts/{attempt_id}/retake", response_model=AttemptOut)
+async def retake_attempt(
+    attempt_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
+    """재응시 — 이전 기록을 삭제하지 않고 superseded로 보존한 채 새 시도를 시작한다.
+
+    스태프의 본인 체험 응시 전용 (응시자 재응시 정책은 별도).
+    """
+    attempt = await db.get(Attempt, attempt_id)
+    if not attempt:
+        raise HTTPException(404, "응시 정보를 찾을 수 없습니다")
+    if user.role not in ("admin", "evaluator") or attempt.user_id != user.id:
+        raise HTTPException(403, "본인의 체험 응시만 재응시할 수 있습니다")
+    await check_expired(attempt, db)
+    if attempt.status == "in_progress":
+        raise HTTPException(400, "진행 중인 응시는 재응시할 수 없습니다")
+    if attempt.superseded:
+        raise HTTPException(400, "이미 재응시로 대체된 기록입니다")
+
+    assessment = await db.get(Assessment, attempt.assessment_id)
+    now = utcnow()
+    deadline = now + timedelta(minutes=assessment.duration_min)
+    if assessment.ends_at and deadline > assessment.ends_at:
+        deadline = assessment.ends_at
+
+    attempt.superseded = True
+    new_attempt = Attempt(
+        assessment_id=attempt.assessment_id, user_id=user.id, started_at=now, deadline_at=deadline
+    )
+    db.add(new_attempt)
+    await db.flush()
+    db.add(
+        Event(
+            attempt_id=new_attempt.id,
+            type="attempt_started",
+            payload={
+                "assessment_id": str(attempt.assessment_id),
+                "deadline_at": deadline.isoformat(),
+                "retake_of": str(attempt.id),
+            },
+        )
+    )
+    await db.commit()
+    return await _attempt_out(new_attempt, db)
 
 
 @router.delete("/attempts/{attempt_id}")

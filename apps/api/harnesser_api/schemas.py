@@ -385,6 +385,7 @@ class ReviewAttemptRow(BaseModel):
     ai_message_count: int = 0
     has_auto_eval: bool = False
     is_staff: bool = False  # 관리자/평가자의 체험 응시
+    superseded: bool = False  # 재응시로 대체된 이전 기록 (보존용)
 
 
 class InternalTestResult(BaseModel):
