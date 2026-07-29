@@ -69,12 +69,26 @@ async def build_context(attempt: Attempt, db: AsyncSession) -> str:
 
     # 행동 통계
     pastes = [e for e in events if e.type == "paste"]
-    focus_lost = [e for e in events if e.type == "focus_lost"]
+    copies = [e for e in events if e.type in ("copy", "cut")]
+    away = [e for e in events if e.type in ("focus_lost", "tab_hidden", "window_blur")]
+    tab_away = [e for e in events if e.type == "tab_hidden"]
+    away_ms = sum(
+        int(e.payload.get("away_ms", 0))
+        for e in events
+        if e.type in ("tab_visible", "window_focus")
+    )
+    page_exits = [e for e in events if e.type == "page_exit"]
     snapshots = [e for e in events if e.type == "code_snapshot"]
     lines.append(
         f"\n## 행동 로그 요약\n- 코드 스냅샷: {len(snapshots)}회\n- 붙여넣기: {len(pastes)}회 "
-        f"(총 {sum(e.payload.get('chars', 0) for e in pastes)}자)\n- 창 이탈: {len(focus_lost)}회"
+        f"(총 {sum(e.payload.get('chars', 0) for e in pastes)}자)\n- 복사/잘라내기: {len(copies)}회\n"
+        f"- 화면 이탈: {len(away)}회 (그중 다른 탭/최소화 {len(tab_away)}회, "
+        f"누적 자리비움 약 {away_ms // 1000}초)\n- 페이지 이탈(새로고침 등): {len(page_exits)}회"
     )
+    if copies:
+        big_copy = sorted(copies, key=lambda e: -e.payload.get("chars", 0))[:2]
+        for e in big_copy:
+            lines.append(f"  - 복사 {e.payload.get('chars', 0)}자 예시: {str(e.payload.get('text', ''))[:200]!r}")
     if pastes:
         big = sorted(pastes, key=lambda e: -e.payload.get("chars", 0))[:3]
         for e in big:

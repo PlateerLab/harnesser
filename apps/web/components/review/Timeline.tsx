@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { EventRow } from "@/lib/types";
-import { EVENT_LABEL, fmtOffset } from "@/lib/format";
+import { AWAY_EVENT_TYPES, EVENT_LABEL, fmtAwayMs, fmtOffset } from "@/lib/format";
 
 const TYPE_COLOR: Record<string, string> = {
   attempt_started: "text-blue-600",
@@ -12,6 +12,18 @@ const TYPE_COLOR: Record<string, string> = {
   paste: "text-red-600",
   focus_lost: "text-amber-600",
   focus_gained: "text-slate-400",
+  tab_hidden: "text-amber-600",
+  tab_visible: "text-slate-400",
+  window_blur: "text-amber-600",
+  window_focus: "text-slate-400",
+  pointer_away: "text-amber-500",
+  copy: "text-red-600",
+  cut: "text-red-600",
+  resize: "text-slate-500",
+  net_offline: "text-red-600",
+  net_online: "text-slate-400",
+  page_enter: "text-sky-600",
+  page_exit: "text-sky-600",
   run_requested: "text-blue-600",
   submit_requested: "text-violet-600",
   run_result: "text-blue-600",
@@ -22,7 +34,16 @@ const TYPE_COLOR: Record<string, string> = {
 
 const FILTERS: { key: string; label: string; types: string[] }[] = [
   { key: "all", label: "전체", types: [] },
-  { key: "integrity", label: "이탈/붙여넣기", types: ["paste", "focus_lost", "focus_gained"] },
+  {
+    key: "integrity",
+    label: "이탈/복사/붙여넣기",
+    types: [
+      "paste", "copy", "cut",
+      "focus_lost", "focus_gained",
+      "tab_hidden", "tab_visible", "window_blur", "window_focus",
+      "pointer_away", "net_offline", "net_online", "page_enter", "page_exit",
+    ],
+  },
   { key: "exec", label: "실행/제출", types: ["run_requested", "submit_requested", "run_result", "submit_result"] },
   { key: "ai", label: "AI 대화", types: ["ai_message"] },
   { key: "snapshot", label: "스냅샷", types: ["code_snapshot"] },
@@ -70,13 +91,19 @@ export function Timeline({
         {filtered.map((e) => {
           const color = TYPE_COLOR[e.type] || "text-slate-500";
           const detail = describe(e);
-          const expandable = e.type === "paste" && !!e.payload.text;
+          const expandable = ["paste", "copy", "cut"].includes(e.type) && !!e.payload.text;
           return (
             <div key={e.id}>
               <div
                 className={`flex items-baseline gap-3 rounded-lg px-3 py-1.5 text-sm hover:bg-slate-50 ${
                   expandable ? "cursor-pointer" : ""
-                } ${e.type === "paste" ? "bg-red-50/60" : e.type === "focus_lost" ? "bg-amber-50/60" : ""}`}
+                } ${
+                  ["paste", "copy", "cut", "net_offline"].includes(e.type)
+                    ? "bg-red-50/60"
+                    : AWAY_EVENT_TYPES.includes(e.type)
+                      ? "bg-amber-50/60"
+                      : ""
+                }`}
                 onClick={() => expandable && setExpanded(expanded === e.id ? null : e.id)}
               >
                 <span className="w-20 shrink-0 font-mono text-xs text-slate-400">
@@ -112,6 +139,17 @@ function describe(e: EventRow): string {
   switch (e.type) {
     case "paste":
       return `${p.chars ?? "?"}자 붙여넣음`;
+    case "copy":
+    case "cut":
+      return `${p.chars ?? "?"}자 ${e.type === "cut" ? "잘라냄" : "복사함"}`;
+    case "tab_visible":
+    case "window_focus":
+    case "pointer_away":
+      return p.away_ms != null ? `${fmtAwayMs(Number(p.away_ms))} 자리 비움` : "";
+    case "resize":
+      return `${p.from} → ${p.to}`;
+    case "page_enter":
+      return String(p.viewport ?? "");
     case "code_snapshot":
       return `${p.language ?? ""} · ${String(p.code ?? "").length}자`;
     case "run_requested":

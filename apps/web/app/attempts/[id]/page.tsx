@@ -165,6 +165,18 @@ export default function AttemptPage({ params }: { params: Promise<{ id: string }
         setCodeState(init);
         setAttempt(a);
         restoreExecutions(a);
+        // 진입 기록 — 최초 시작과 새로고침/복귀를 리뷰에서 구분할 수 있게 한다
+        api
+          .post(`/attempts/${attemptId}/events`, {
+            events: [
+              {
+                type: "page_enter",
+                problem_id: null,
+                payload: { viewport: `${window.innerWidth}x${window.innerHeight}` },
+              },
+            ],
+          })
+          .catch(() => {});
       })
       .catch((e) => setError(e instanceof ApiError ? e.message : "불러오기 실패"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -263,19 +275,110 @@ export default function AttemptPage({ params }: { params: Promise<{ id: string }
     return () => clearInterval(t);
   }, [attempt, snapshot]);
 
-  // 화면 이탈/복귀 기록
+  // ── 행동 감시: 이탈(탭/창 구분)·복사·창 크기·네트워크·포인터 ──
+  // blur와 visibilitychange가 함께 발화해도 단일 상태 머신이라 중복 기록이 없다.
   useEffect(() => {
     if (!attempt) return;
-    const onBlur = () => record("focus_lost", null, {});
-    const onFocus = () => record("focus_gained", null, {});
-    const onVisibility = () => (document.visibilityState === "hidden" ? onBlur() : onFocus());
+
+    const away = { active: false, kind: "" as "tab" | "window" | "", since: 0 };
+    let blurTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const goAway = (kind: "tab" | "window") => {
+      if (away.active) return;
+      away.active = true;
+      away.kind = kind;
+      away.since = Date.now();
+      record(kind === "tab" ? "tab_hidden" : "window_blur", null, {});
+    };
+    const comeBack = () => {
+      if (!away.active) return;
+      const awayMs = Date.now() - away.since;
+      record(away.kind === "tab" ? "tab_visible" : "window_focus", null, { away_ms: awayMs });
+      away.active = false;
+      away.kind = "";
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        if (blurTimer) clearTimeout(blurTimer); // blur 분류 대기 취소 — 탭 이탈로 확정
+        goAway("tab");
+      } else if (away.active && away.kind === "tab") {
+        comeBack();
+      }
+    };
+    const onBlur = () => {
+      // blur가 탭 전환의 전조인지, 다른 창/앱으로의 이동인지 잠시 기다려 분류
+      blurTimer = setTimeout(() => {
+        if (document.visibilityState === "visible") goAway("window");
+      }, 150);
+    };
+    const onFocus = () => comeBack();
+
+    // 복사/잘라내기 — 지문을 밖으로 가져가는 신호
+    const onCopy = (e: ClipboardEvent) => {
+      const text = document.getSelection()?.toString() ?? "";
+      if (text.trim()) {
+        record(e.type === "cut" ? "cut" : "copy", null, {
+          chars: text.length,
+          text: text.slice(0, 500),
+        });
+      }
+    };
+
+    // 창 크기 변경 (화면 분할 등) — 1초 디바운스 + 유의미한 변화만
+    let lastSize = { w: window.innerWidth, h: window.innerHeight };
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+    const onResize = () => {
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        if (Math.abs(w - lastSize.w) > 60 || Math.abs(h - lastSize.h) > 60) {
+          record("resize", null, { from: `${lastSize.w}x${lastSize.h}`, to: `${w}x${h}` });
+          lastSize = { w, h };
+        }
+      }, 1000);
+    };
+
+    // 네트워크 상태
+    const onOffline = () => record("net_offline", null, {});
+    const onOnline = () => record("net_online", null, {});
+
+    // 포인터가 3초 이상 화면 밖에 머문 경우 (창 포커스는 유지된 채 다른 모니터 사용 등)
+    let pointerLeftAt = 0;
+    const onMouseLeave = () => {
+      pointerLeftAt = Date.now();
+    };
+    const onMouseEnter = () => {
+      if (pointerLeftAt && Date.now() - pointerLeftAt > 3000 && !away.active) {
+        record("pointer_away", null, { away_ms: Date.now() - pointerLeftAt });
+      }
+      pointerLeftAt = 0;
+    };
+
+    document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("blur", onBlur);
     window.addEventListener("focus", onFocus);
-    document.addEventListener("visibilitychange", onVisibility);
+    document.addEventListener("copy", onCopy as EventListener);
+    document.addEventListener("cut", onCopy as EventListener);
+    window.addEventListener("resize", onResize);
+    window.addEventListener("offline", onOffline);
+    window.addEventListener("online", onOnline);
+    document.documentElement.addEventListener("mouseleave", onMouseLeave);
+    document.documentElement.addEventListener("mouseenter", onMouseEnter);
     return () => {
+      if (blurTimer) clearTimeout(blurTimer);
+      if (resizeTimer) clearTimeout(resizeTimer);
+      document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("blur", onBlur);
       window.removeEventListener("focus", onFocus);
-      document.removeEventListener("visibilitychange", onVisibility);
+      document.removeEventListener("copy", onCopy as EventListener);
+      document.removeEventListener("cut", onCopy as EventListener);
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("offline", onOffline);
+      window.removeEventListener("online", onOnline);
+      document.documentElement.removeEventListener("mouseleave", onMouseLeave);
+      document.documentElement.removeEventListener("mouseenter", onMouseEnter);
     };
   }, [attempt, record]);
 
@@ -297,6 +400,14 @@ export default function AttemptPage({ params }: { params: Promise<{ id: string }
           new Blob([body], { type: "application/json" }),
         );
       }
+      // 이탈 기록 (새로고침/닫기/다른 페이지 이동)
+      navigator.sendBeacon(
+        `/api/attempts/${attemptId}/events`,
+        new Blob(
+          [JSON.stringify({ events: [{ type: "page_exit", problem_id: null, payload: {} }] })],
+          { type: "application/json" },
+        ),
+      );
     };
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       beacon();

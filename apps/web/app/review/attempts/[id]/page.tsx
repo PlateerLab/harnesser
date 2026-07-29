@@ -65,7 +65,8 @@ export default function ReviewAttemptPage({ params }: { params: Promise<{ id: st
       maxScore,
       pastes: pastes.length,
       pasteChars: pastes.reduce((s, e) => s + Number(e.payload.chars ?? 0), 0),
-      focusLost: ev.filter((e) => e.type === "focus_lost").length,
+      copies: ev.filter((e) => e.type === "copy" || e.type === "cut").length,
+      focusLost: ev.filter((e) => ["focus_lost", "tab_hidden", "window_blur"].includes(e.type)).length,
       runs: detail.executions.filter((x) => x.kind === "run").length,
       submits: detail.executions.filter((x) => x.kind === "submit").length,
       aiTurns: detail.ai_messages.filter((m) => m.role === "user").length,
@@ -136,7 +137,12 @@ export default function ReviewAttemptPage({ params }: { params: Promise<{ id: st
         </Card>
         <StatCard label="소요 시간" value={fmtDuration(stats.durationS)} />
         <StatCard label="실행 / 제출" value={`${stats.runs} / ${stats.submits}`} />
-        <StatCard label="붙여넣기" value={`${stats.pastes}회`} warn={stats.pastes > 0} sub={`${stats.pasteChars}자`} />
+        <StatCard
+          label="복사 / 붙여넣기"
+          value={`${stats.copies} / ${stats.pastes}회`}
+          warn={stats.pastes > 0 || stats.copies > 0}
+          sub={`붙여넣기 ${stats.pasteChars}자`}
+        />
         <StatCard label="화면 이탈" value={`${stats.focusLost}회`} warn={stats.focusLost > 2} />
         {detail.assessment.mode === "ai_assisted" ? (
           <StatCard label="AI 질문" value={`${stats.aiTurns}턴`} />
