@@ -3,8 +3,63 @@
 import { useMemo } from "react";
 import type { ReferenceFile } from "@/lib/types";
 import { Markdown } from "../Markdown";
+import { CodeEditor } from "../CodeEditor";
 
-/** 참고 자료 뷰어 — 종류별 렌더 (CSV 표 / Markdown / 텍스트 / 이미지 / JSON). */
+// 확장자 → Monaco 언어 (구문 강조). 매핑에 없으면 plaintext.
+const EXT_LANG: Record<string, string> = {
+  py: "python",
+  js: "javascript",
+  jsx: "javascript",
+  ts: "typescript",
+  tsx: "typescript",
+  java: "java",
+  c: "c",
+  h: "c",
+  cpp: "cpp",
+  cc: "cpp",
+  hpp: "cpp",
+  cs: "csharp",
+  go: "go",
+  rs: "rust",
+  rb: "ruby",
+  php: "php",
+  kt: "kotlin",
+  swift: "swift",
+  scala: "scala",
+  sql: "sql",
+  sh: "shell",
+  bash: "shell",
+  zsh: "shell",
+  yml: "yaml",
+  yaml: "yaml",
+  toml: "ini",
+  ini: "ini",
+  xml: "xml",
+  html: "html",
+  htm: "html",
+  css: "css",
+  scss: "scss",
+  dockerfile: "dockerfile",
+  makefile: "makefile",
+  r: "r",
+  m: "objective-c",
+  pl: "perl",
+  lua: "lua",
+  dart: "dart",
+  json: "json",
+  log: "plaintext",
+  txt: "plaintext",
+};
+
+function monacoLangFor(path: string): string {
+  const base = path.split("/").pop()?.toLowerCase() ?? "";
+  if (base === "dockerfile") return "dockerfile";
+  if (base === "makefile") return "makefile";
+  const ext = base.includes(".") ? base.split(".").pop()! : "";
+  return EXT_LANG[ext] ?? "plaintext";
+}
+
+/** 참고 자료 뷰어 — 종류별 렌더 (CSV 표 / Markdown / 코드·텍스트 / 이미지 / JSON). */
 export function Viewer({ file, theme = "dark" }: { file: ReferenceFile; theme?: "dark" | "light" }) {
   const dark = theme === "dark";
 
@@ -31,15 +86,12 @@ export function Viewer({ file, theme = "dark" }: { file: ReferenceFile; theme?: 
     );
   }
 
-  // text / json — monospace pre
+  // text / json — Monaco 읽기 전용으로 구문 강조 (확장자로 언어 감지)
+  const lang = file.kind === "json" ? "json" : monacoLangFor(file.path);
   return (
-    <pre
-      className={`h-full overflow-auto p-5 font-mono text-xs leading-relaxed ${
-        dark ? "bg-slate-900 text-slate-200" : "bg-white text-slate-800"
-      }`}
-    >
-      {file.content}
-    </pre>
+    <div className={`h-full ${dark ? "bg-[#1e1e1e]" : "bg-white"}`}>
+      <CodeEditor language={lang} value={file.content} readOnly theme={dark ? "vs-dark" : "light"} />
+    </div>
   );
 }
 
