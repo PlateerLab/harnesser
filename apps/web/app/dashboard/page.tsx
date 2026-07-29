@@ -7,6 +7,7 @@ import { api, ApiError } from "@/lib/api";
 import type { Attempt, MyAssignment } from "@/lib/types";
 import { fmtDateTime, STATUS_LABEL } from "@/lib/format";
 import { useUser, logout } from "@/components/useUser";
+import { useToast } from "@/components/toast";
 import { Badge, Button, Card, EmptyState, Spinner } from "@/components/ui";
 
 export default function DashboardPage() {
@@ -14,6 +15,7 @@ export default function DashboardPage() {
   const [assignments, setAssignments] = useState<MyAssignment[] | null>(null);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const { toast, confirm } = useToast();
   const router = useRouter();
 
   const isStaff = user?.role === "admin" || user?.role === "evaluator";
@@ -32,20 +34,20 @@ export default function DashboardPage() {
       const attempt = await api.post<Attempt>(`/assessments/${assessmentId}/attempts`);
       router.push(`/attempts/${attempt.id}`);
     } catch (e) {
-      alert(e instanceof ApiError ? e.message : "시작할 수 없습니다");
+      toast(e instanceof ApiError ? e.message : "시작할 수 없습니다", "error");
       setBusyId(null);
     }
   };
 
   const retake = async (a: MyAssignment) => {
     if (!a.attempt_id) return;
-    if (!confirm("다시 응시합니다. 이전 응시 기록은 삭제되지 않고 리뷰에 '재응시 이전 기록'으로 보존됩니다.")) return;
+    if (!(await confirm({ title: "다시 응시할까요?", confirmLabel: "다시 응시", danger: true }))) return;
     setBusyId(a.assessment_id);
     try {
       const attempt = await api.post<Attempt>(`/attempts/${a.attempt_id}/retake`);
       router.push(`/attempts/${attempt.id}`);
     } catch (e) {
-      alert(e instanceof ApiError ? e.message : "다시 응시할 수 없습니다");
+      toast(e instanceof ApiError ? e.message : "다시 응시할 수 없습니다", "error");
       setBusyId(null);
     }
   };

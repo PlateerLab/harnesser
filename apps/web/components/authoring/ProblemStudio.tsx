@@ -9,6 +9,7 @@ import { CodeEditor } from "../CodeEditor";
 import { Divider } from "../Divider";
 import { Markdown } from "../Markdown";
 import { Button, Card, Field, inputCls } from "../ui";
+import { useToast } from "../toast";
 import { AuthoringChat } from "./AuthoringChat";
 
 type TabKey = "basic" | "statement" | "starter" | "tests";
@@ -122,6 +123,7 @@ export function ProblemStudio({ initial, problemId }: { initial?: Problem; probl
   const [preview, setPreview] = useState(false);
   const [busy, setBusy] = useState(false);
   const [chatW, setChatW] = useState(420);
+  const { toast, confirm } = useToast();
   const mainRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
@@ -263,7 +265,7 @@ export function ProblemStudio({ initial, problemId }: { initial?: Problem; probl
   const save = async () => {
     if (!form.title.trim()) {
       setTab("basic");
-      alert("제목을 입력하세요");
+      toast("제목을 입력하세요", "info");
       return;
     }
     setBusy(true);
@@ -272,13 +274,14 @@ export function ProblemStudio({ initial, problemId }: { initial?: Problem; probl
       else await api.post("/problems", form);
       router.push("/admin/problems");
     } catch (e) {
-      alert(e instanceof ApiError ? e.message : "저장 실패");
+      toast(e instanceof ApiError ? e.message : "저장 실패", "error");
       setBusy(false);
     }
   };
 
   const remove = async () => {
-    if (!problemId || !confirm("이 문제를 삭제(보관)할까요?")) return;
+    if (!problemId) return;
+    if (!(await confirm({ title: "이 문제를 삭제할까요?", danger: true, confirmLabel: "삭제" }))) return;
     await api.del(`/problems/${problemId}`);
     router.push("/admin/problems");
   };

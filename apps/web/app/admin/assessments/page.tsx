@@ -10,11 +10,13 @@ import { Shell } from "@/components/Shell";
 import { DataTable } from "@/components/DataTable";
 import { IconDelete, IconEdit, IconResults } from "@/components/icons";
 import { Badge, Button, IconButton, SearchInput, Spinner } from "@/components/ui";
+import { useToast } from "@/components/toast";
 
 export default function AssessmentsPage() {
   const { user, loading } = useUser(["admin"]);
   const [rows, setRows] = useState<Assessment[] | null>(null);
   const [q, setQ] = useState("");
+  const { confirm } = useToast();
 
   const load = () => api.get<Assessment[]>("/assessments").then(setRows);
 
@@ -29,7 +31,7 @@ export default function AssessmentsPage() {
   }, [rows, q]);
 
   const remove = async (a: Assessment) => {
-    if (!confirm(`'${a.title}' 시험을 삭제할까요? 응시 기록도 함께 삭제됩니다.`)) return;
+    if (!(await confirm({ title: "시험을 삭제할까요?", message: `${a.title} — 응시 기록도 함께 삭제됩니다.`, danger: true, confirmLabel: "삭제" }))) return;
     await api.del(`/assessments/${a.id}`);
     load();
   };

@@ -18,6 +18,7 @@ import { Timer } from "@/components/Timer";
 import { AiChat } from "@/components/AiChat";
 import { ExecutionResults } from "@/components/ExecutionResults";
 import { Badge, Spinner } from "@/components/ui";
+import { useToast } from "@/components/toast";
 
 const SNAPSHOT_INTERVAL_MS = 20_000; // 리뷰 타임라인용 주기 스냅샷
 const STATE_SAVE_DEBOUNCE_MS = 1_500; // 편집 멈춤 후 상태 저장 (새로고침 복원용)
@@ -100,6 +101,7 @@ export default function AttemptPage({ params }: { params: Promise<{ id: string }
   const [layout, setLayout] = useState<Layout>(DEFAULT_LAYOUT);
   const mainRef = useRef<HTMLDivElement>(null);
   const editorColRef = useRef<HTMLDivElement>(null);
+  const { toast, confirm } = useToast();
 
   // 레이아웃 복원/저장 (localStorage)
   useEffect(() => {
@@ -147,7 +149,6 @@ export default function AttemptPage({ params }: { params: Promise<{ id: string }
       .get<Attempt>(`/attempts/${attemptId}`)
       .then((a) => {
         if (a.status !== "in_progress") {
-          alert("이미 종료된 시험입니다.");
           router.replace("/dashboard");
           return;
         }
@@ -449,10 +450,10 @@ export default function AttemptPage({ params }: { params: Promise<{ id: string }
       const st = codeStateRef.current[problem.id];
       const code = st.codeByLang[st.language] ?? "";
       if (!code.trim()) {
-        alert("코드를 작성해주세요.");
+        toast("코드를 작성해주세요.", "info");
         return;
       }
-      if (kind === "submit" && !confirm("전체 테스트로 채점합니다. 제출할까요?")) return;
+      if (kind === "submit" && !(await confirm({ title: "제출할까요?", message: "전체 테스트로 채점합니다.", confirmLabel: "제출" }))) return;
       setBusy(true);
       snapshot(problem.id, true);
       saveState(problem.id, true);
@@ -467,10 +468,10 @@ export default function AttemptPage({ params }: { params: Promise<{ id: string }
         poll(ex.id, problem.id);
       } catch (e) {
         setBusy(false);
-        alert(e instanceof ApiError ? e.message : "실행 요청 실패");
+        toast(e instanceof ApiError ? e.message : "실행 요청 실패", "error");
       }
     },
-    [attempt, activeIdx, attemptId, busy, poll, snapshot, saveState],
+    [attempt, activeIdx, attemptId, busy, poll, snapshot, saveState, toast, confirm],
   );
 
   // ── 종료 ──────────────────────────────────────────────────

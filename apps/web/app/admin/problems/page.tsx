@@ -10,6 +10,7 @@ import { Shell } from "@/components/Shell";
 import { DataTable } from "@/components/DataTable";
 import { IconDelete, IconEdit } from "@/components/icons";
 import { Badge, Button, IconButton, SearchInput, Spinner } from "@/components/ui";
+import { useToast } from "@/components/toast";
 
 const FILTERS = [
   { key: "all", label: "전체" },
@@ -23,6 +24,7 @@ export default function ProblemsPage() {
   const [problems, setProblems] = useState<ProblemSummary[] | null>(null);
   const [filter, setFilter] = useState("all");
   const [q, setQ] = useState("");
+  const { confirm } = useToast();
 
   const load = () => api.get<ProblemSummary[]>("/problems").then(setProblems);
 
@@ -40,7 +42,7 @@ export default function ProblemsPage() {
   }, [problems, filter, q]);
 
   const remove = async (p: ProblemSummary) => {
-    if (!confirm(`'${p.title}' 문제를 삭제(보관)할까요?`)) return;
+    if (!(await confirm({ title: "문제를 삭제할까요?", message: p.title, danger: true, confirmLabel: "삭제" }))) return;
     await api.del(`/problems/${p.id}`);
     load();
   };

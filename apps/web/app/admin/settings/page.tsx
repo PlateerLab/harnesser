@@ -12,6 +12,7 @@ import type {
 import { useUser } from "@/components/useUser";
 import { Shell } from "@/components/Shell";
 import { Button, Card, EmptyState, Field, inputCls, Modal, Spinner } from "@/components/ui";
+import { useToast } from "@/components/toast";
 
 interface ProviderForm {
   name: string;
@@ -44,6 +45,7 @@ export default function SettingsPage() {
   const [editing, setEditing] = useState<{ row: AiProviderRow | null } | null>(null);
   const [testResults, setTestResults] = useState<Record<string, AiTestResult>>({});
   const [busyId, setBusyId] = useState<string>("");
+  const { confirm } = useToast();
 
   const load = useCallback(async () => {
     const [m, r] = await Promise.all([
@@ -101,7 +103,7 @@ export default function SettingsPage() {
   };
 
   const remove = async (row: AiProviderRow) => {
-    if (!confirm(`'${row.name}' 공급자를 삭제할까요?`)) return;
+    if (!(await confirm({ title: "공급자를 삭제할까요?", message: row.name, danger: true, confirmLabel: "삭제" }))) return;
     await api.del(`/admin/settings/ai/providers/${row.id}`);
     await load();
   };
@@ -306,6 +308,7 @@ function ProviderModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { toast } = useToast();
   const [form, setForm] = useState<ProviderForm>(
     row
       ? {
@@ -385,8 +388,8 @@ function ProviderModal({
   };
 
   const save = async () => {
-    if (!form.name.trim()) return alert("이름을 입력하세요");
-    if (!form.model.trim()) return alert("모델을 입력하세요");
+    if (!form.name.trim()) return toast("이름을 입력하세요", "info");
+    if (!form.model.trim()) return toast("모델을 입력하세요", "info");
     setBusy("save");
     const body = {
       name: form.name.trim(),
@@ -403,7 +406,7 @@ function ProviderModal({
       else await api.post("/admin/settings/ai/providers", body);
       onSaved();
     } catch (e) {
-      alert(e instanceof ApiError ? e.message : "저장 실패");
+      toast(e instanceof ApiError ? e.message : "저장 실패", "error");
       setBusy("");
     }
   };

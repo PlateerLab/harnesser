@@ -14,6 +14,7 @@ import {
 import { useUser } from "@/components/useUser";
 import { Shell } from "@/components/Shell";
 import { Badge, Button, Card, Field, inputCls, Spinner } from "@/components/ui";
+import { useToast } from "@/components/toast";
 import { Markdown } from "@/components/Markdown";
 import { CodeEditor } from "@/components/CodeEditor";
 import { Timeline } from "@/components/review/Timeline";
@@ -292,6 +293,7 @@ function OverviewTab({
   const [providers, setProviders] = useState<EvalProvider[]>([]);
   const [evalProviderId, setEvalProviderId] = useState("");
   const [evalBusy, setEvalBusy] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     api.get<EvalProvider[]>("/review/ai-providers").then((rows) => {
@@ -312,14 +314,14 @@ function OverviewTab({
       });
       onSaved();
     } catch (e) {
-      alert(e instanceof ApiError ? e.message : "자동평가 실패");
+      toast(e instanceof ApiError ? e.message : "자동평가 실패", "error");
     } finally {
       setEvalBusy(false);
     }
   };
 
   const saveHuman = async () => {
-    if (!summary.trim()) return alert("평가 의견을 입력하세요");
+    if (!summary.trim()) return toast("평가 의견을 입력하세요", "info");
     setBusy(true);
     try {
       await api.post(`/review/attempts/${attemptId}/evaluations`, {

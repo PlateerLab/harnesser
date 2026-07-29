@@ -9,6 +9,7 @@ import { useUser } from "@/components/useUser";
 import { Shell } from "@/components/Shell";
 import { IconAdd, IconDelete } from "@/components/icons";
 import { Button, Card, Field, IconButton, inputCls, Spinner } from "@/components/ui";
+import { useToast } from "@/components/toast";
 
 interface DraftUser {
   name: string;
@@ -82,6 +83,7 @@ function guessColumns(grid: string[][]): { headerRow: boolean; map: ColField[] }
 
 export default function BulkAddUsersPage() {
   const { user, loading } = useUser(["admin"]);
+  const { toast } = useToast();
   const router = useRouter();
 
   const [rows, setRows] = useState<DraftUser[]>([emptyRow()]);
@@ -106,7 +108,7 @@ export default function BulkAddUsersPage() {
   // ── 가져오기 ─────────────────────────────────────────────
   const loadGrid = (g: string[][]) => {
     const cleaned = g.map((r) => r.map((c) => String(c ?? "").trim())).filter((r) => r.some(Boolean));
-    if (cleaned.length === 0) return alert("데이터가 없습니다");
+    if (cleaned.length === 0) return toast("데이터가 없습니다", "info");
     const guess = guessColumns(cleaned);
     setGrid(cleaned);
     setColMap(guess.map);
@@ -124,7 +126,7 @@ export default function BulkAddUsersPage() {
 
   const importGrid = () => {
     if (!grid) return;
-    if (!colMap.includes("email")) return alert("이메일 컬럼을 지정하세요");
+    if (!colMap.includes("email")) return toast("이메일 컬럼을 지정하세요", "info");
     const dataRows = hasHeader ? grid.slice(1) : grid;
     const imported: DraftUser[] = [];
     let skipped = 0;
@@ -143,17 +145,17 @@ export default function BulkAddUsersPage() {
       if (!draft.name) draft.name = draft.email.split("@")[0];
       imported.push(draft);
     }
-    if (imported.length === 0) return alert("가져올 유효한 행이 없습니다");
+    if (imported.length === 0) return toast("가져올 유효한 행이 없습니다", "info");
     setRows((prev) => [...prev.filter((r) => r.email.trim() || r.name.trim()), ...imported]);
     setGrid(null);
     if (fileRef.current) fileRef.current.value = "";
-    if (skipped > 0) alert(`이메일이 없는 ${skipped}개 행은 건너뛰었습니다`);
+    if (skipped > 0) toast(`이메일이 없는 ${skipped}개 행은 건너뛰었습니다`, "info");
   };
 
   // ── 등록 ─────────────────────────────────────────────────
   const submit = async () => {
-    if (validRows.length === 0) return alert("등록할 사용자가 없습니다 (이름과 이메일 필수)");
-    if (defaultPassword && defaultPassword.length < 6) return alert("공통 비밀번호는 6자 이상이어야 합니다");
+    if (validRows.length === 0) return toast("등록할 사용자가 없습니다 (이름과 이메일 필수)", "info");
+    if (defaultPassword && defaultPassword.length < 6) return toast("공통 비밀번호는 6자 이상이어야 합니다", "info");
     setBusy(true);
     try {
       const res = await api.post<BulkResult>("/admin/users/bulk", {
@@ -167,7 +169,7 @@ export default function BulkAddUsersPage() {
       });
       setResult(res);
     } catch (e) {
-      alert(e instanceof ApiError ? e.message : "등록 실패");
+      toast(e instanceof ApiError ? e.message : "등록 실패", "error");
     } finally {
       setBusy(false);
     }

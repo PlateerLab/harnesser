@@ -10,6 +10,7 @@ import { Shell } from "@/components/Shell";
 import { DataTable } from "@/components/DataTable";
 import { IconDelete, IconEdit } from "@/components/icons";
 import { Badge, Button, Field, IconButton, inputCls, Modal, SearchInput, Spinner } from "@/components/ui";
+import { useToast } from "@/components/toast";
 
 interface UserForm {
   email: string;
@@ -23,6 +24,7 @@ export default function UsersPage() {
   const [rows, setRows] = useState<User[] | null>(null);
   const [editing, setEditing] = useState<{ target: User | null } | null>(null);
   const [q, setQ] = useState("");
+  const { confirm } = useToast();
 
   const load = () => api.get<User[]>("/admin/users").then(setRows);
 
@@ -39,7 +41,7 @@ export default function UsersPage() {
   }, [rows, q]);
 
   const remove = async (target: User) => {
-    if (!confirm(`${target.email} 계정을 삭제할까요? 응시 기록도 함께 삭제됩니다.`)) return;
+    if (!(await confirm({ title: "계정을 삭제할까요?", message: `${target.email} — 응시 기록도 함께 삭제됩니다.`, danger: true, confirmLabel: "삭제" }))) return;
     await api.del(`/admin/users/${target.id}`);
     load();
   };
@@ -114,6 +116,7 @@ function UserModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { toast } = useToast();
   const [form, setForm] = useState<UserForm>({
     email: target?.email ?? "",
     name: target?.name ?? "",
@@ -136,7 +139,7 @@ function UserModal({
       }
       onSaved();
     } catch (e) {
-      alert(e instanceof ApiError ? e.message : "저장 실패");
+      toast(e instanceof ApiError ? e.message : "저장 실패", "error");
       setBusy(false);
     }
   };

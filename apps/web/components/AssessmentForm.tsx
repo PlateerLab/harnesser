@@ -6,6 +6,7 @@ import { api, ApiError } from "@/lib/api";
 import type { AiProviderRow, Assessment, ProblemSummary, User } from "@/lib/types";
 import { DIFFICULTY_LABEL } from "@/lib/format";
 import { Badge, Button, Card, Field, inputCls, SearchInput } from "./ui";
+import { useToast } from "./toast";
 
 interface FormState {
   title: string;
@@ -70,6 +71,7 @@ export function AssessmentForm({ initial, assessmentId }: { initial?: Assessment
   const [problemQ, setProblemQ] = useState("");
   const [candidateQ, setCandidateQ] = useState("");
   const [busy, setBusy] = useState(false);
+  const { toast, confirm } = useToast();
   const router = useRouter();
 
   useEffect(() => {
@@ -111,8 +113,8 @@ export function AssessmentForm({ initial, assessmentId }: { initial?: Assessment
   };
 
   const save = async () => {
-    if (!form.title.trim()) return alert("제목을 입력하세요");
-    if (form.problems.length === 0) return alert("문제를 1개 이상 선택하세요");
+    if (!form.title.trim()) return toast("제목을 입력하세요", "info");
+    if (form.problems.length === 0) return toast("문제를 1개 이상 선택하세요", "info");
     setBusy(true);
     const payload = {
       ...form,
@@ -124,13 +126,14 @@ export function AssessmentForm({ initial, assessmentId }: { initial?: Assessment
       else await api.post("/assessments", payload);
       router.push("/admin/assessments");
     } catch (e) {
-      alert(e instanceof ApiError ? e.message : "저장 실패");
+      toast(e instanceof ApiError ? e.message : "저장 실패", "error");
       setBusy(false);
     }
   };
 
   const remove = async () => {
-    if (!assessmentId || !confirm("시험을 삭제할까요? 응시 기록도 함께 삭제됩니다.")) return;
+    if (!assessmentId) return;
+    if (!(await confirm({ title: "시험을 삭제할까요?", message: "응시 기록도 함께 삭제됩니다.", danger: true, confirmLabel: "삭제" }))) return;
     await api.del(`/assessments/${assessmentId}`);
     router.push("/admin/assessments");
   };

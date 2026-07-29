@@ -10,11 +10,13 @@ import { Shell } from "@/components/Shell";
 import { DataTable } from "@/components/DataTable";
 import { IconDelete, IconView } from "@/components/icons";
 import { Badge, IconButton, SearchInput, Spinner } from "@/components/ui";
+import { useToast } from "@/components/toast";
 
 function ReviewList() {
   const { user, loading } = useUser(["admin", "evaluator"]);
   const [rows, setRows] = useState<ReviewAttemptRow[] | null>(null);
   const [q, setQ] = useState("");
+  const { confirm } = useToast();
   const searchParams = useSearchParams();
   const assessmentId = searchParams.get("assessment_id");
 
@@ -40,7 +42,7 @@ function ReviewList() {
   }, [rows, q]);
 
   const remove = async (r: ReviewAttemptRow) => {
-    if (!confirm(`${r.candidate_name}의 '${r.assessment_title}' 응시 기록을 삭제할까요? 되돌릴 수 없습니다.`)) return;
+    if (!(await confirm({ title: "응시 기록을 삭제할까요?", message: `${r.candidate_name} — ${r.assessment_title}. 되돌릴 수 없습니다.`, danger: true, confirmLabel: "삭제" }))) return;
     await api.del(`/attempts/${r.id}`);
     load();
   };
