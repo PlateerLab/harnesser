@@ -55,6 +55,13 @@ async def main():
     slow = (await client.post("/admin/settings/ai/providers", json={
         "name": "모의 slow", "provider": "custom", "base_url": MOCK_BASE, "model": "mock-model-slow"})).json()
     probs = (await client.get("/problems")).json()
+    # 기본 스트리밍 검증은 참고 자료 없는 문제여야 한다 — 자료가 있으면 도구
+    # 루프(비스트리밍, 델타 1개)로 흘러 "multiple deltas" 단언이 무의미해진다.
+    for _p in probs:
+        _detail = (await client.get(f"/problems/{_p['id']}")).json()
+        if not _detail.get("reference_files"):
+            probs = [_p]
+            break
     a_fast = (await client.post("/assessments", json={
         "title": "WS fast", "mode": "ai_assisted", "duration_min": 30, "ai_max_turns": 5,
         "ai_provider_id": fast["id"], "problems": [{"problem_id": probs[0]["id"], "points": 100}], "assignee_ids": []})).json()

@@ -10,8 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..ai import provider
 from ..ai.chat_service import (
     MAX_TOOL_ITERATIONS,
-    REFERENCE_SYSTEM_SUFFIX,
     SYSTEM_PROMPT,
+    build_reference_system_text,
     used_turns,
 )
 from ..problem_content import REFERENCE_TOOLS, execute_reference_tool
@@ -100,7 +100,7 @@ async def chat(
         prob = await db.get(Problem, body.problem_id)
         if prob and prob.reference_files:
             reference_files = list(prob.reference_files)
-            system_text += REFERENCE_SYSTEM_SUFFIX
+            system_text += build_reference_system_text(res, reference_files)
     messages: list[dict] = []
     history_q = (
         select(AiMessage)
@@ -213,7 +213,9 @@ async def chat(
         persisted = False
         try:
             try:
-                if reference_files:
+                # 도구 루프는 호스트 도구 지원 공급자에서만 — CLI 계열은 자료가
+                # system_text에 인라인되어 있어 일반 스트리밍으로 흐른다.
+                if reference_files and provider.supports_host_tools(res):
                     async for kind, payload in reference_tool_stream():
                         if kind == "delta":
                             parts.append(payload)

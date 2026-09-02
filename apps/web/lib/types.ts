@@ -106,11 +106,12 @@ export interface Assessment {
 export interface AiProviderMeta {
   provider: string;
   label: string;
-  kind: "cloud" | "local";
+  kind: "cloud" | "local" | "cli";
   needs_key: boolean;
   needs_base_url: boolean;
   default_base_url: string | null;
   placeholder_model: string;
+  supports_host_tools: boolean;
   description: string;
 }
 
@@ -142,6 +143,7 @@ export interface AiProviderRow {
   is_eval_default: boolean;
   has_key: boolean;
   key_hint: string | null;
+  supports_host_tools: boolean;
   created_at: string;
 }
 

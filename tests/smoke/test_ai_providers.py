@@ -20,16 +20,30 @@ for p in ad.get(f"{API}/admin/settings/ai/providers").json():
 # 1. 메타/카탈로그
 meta = ad.get(f"{API}/admin/settings/ai/meta").json()
 kinds = {c["provider"] for c in meta["catalog"]}
-check("catalog 7 providers", kinds == {"openai","anthropic","google","vllm","ollama","lmstudio","custom"}, str(kinds))
+check("catalog 8 providers", kinds == {"openai","anthropic","google","vllm","ollama","lmstudio","custom","claude_code_cli"}, str(kinds))
 check("unconfigured initially", meta["effective_chat"] is None or not meta["effective_chat"]["configured"], str(meta["effective_chat"]))
+cc = next(c for c in meta["catalog"] if c["provider"] == "claude_code_cli")
+check("claude_code meta locked", cc["kind"] == "cli" and cc["needs_key"] and cc["supports_host_tools"] is False, str(cc))
 
 # 2. 검증 규칙
 r = ad.post(f"{API}/admin/settings/ai/providers", json={"name":"x","provider":"custom","model":"m"})
 check("custom needs base_url (400)", r.status_code == 400, str(r.status_code))
 r = ad.post(f"{API}/admin/settings/ai/providers", json={"name":"x","provider":"anthropic","model":"m"})
 check("anthropic needs key (400)", r.status_code == 400, str(r.status_code))
+r = ad.post(f"{API}/admin/settings/ai/providers", json={"name":"x","provider":"claude_code_cli","model":"sonnet"})
+check("claude_code needs key (400)", r.status_code == 400, str(r.status_code))
 r = ad.post(f"{API}/admin/settings/ai/providers", json={"name":"x","provider":"nope","model":"m"})
 check("unknown provider (400)", r.status_code == 400, str(r.status_code))
+
+# 2b. claude_code CRUD + 정적 모델 카탈로그 (실키 없이도 관리 기능은 전부 동작)
+pcc = ad.post(f"{API}/admin/settings/ai/providers", json={
+    "name": "Claude Code", "provider": "claude_code_cli",
+    "api_key": "sk-ant-smoke-not-real", "model": "sonnet"}).json()
+check("claude_code created", pcc.get("provider") == "claude_code_cli" and pcc.get("has_key"), str(pcc)[:200])
+check("claude_code row flags host tools off", pcc.get("supports_host_tools") is False, str(pcc.get("supports_host_tools")))
+m = ad.post(f"{API}/admin/settings/ai/models", json={"provider_id": pcc["id"]}).json()
+check("claude_code static models", m["source"] == "static" and any(x["id"] == "sonnet" for x in m["models"]), str(m)[:200])
+ad.delete(f"{API}/admin/settings/ai/providers/{pcc['id']}")
 
 # 3. 모의 서버 공급자 생성 (custom)
 p1 = ad.post(f"{API}/admin/settings/ai/providers", json={

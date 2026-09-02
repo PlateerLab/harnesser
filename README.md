@@ -19,7 +19,8 @@ docker compose up -d --build
 
 ### 2. AI 활용 테스트 (`ai_assisted` 모드)
 - 응시 화면에 AI 채팅 패널 제공 — 응시자는 LLM과 대화하며 코드를 작성/붙여넣기
-- OpenAI 호환 엔드포인트면 무엇이든 연결 가능 (OpenAI / Anthropic compat / vLLM / 사내 게이트웨이)
+- 관리자 콘솔에서 공급자 관리: OpenAI / Anthropic / Gemini / vLLM / Ollama / LM Studio / OpenAI 호환 / **Claude Code (CLI)**
+- Claude Code 공급자는 **순수 LLM 잠금 모드**로 구동 — CLI 내장 도구(`--tools ""` + disallow 전체 카탈로그)·스킬(`--disable-slash-commands`)·MCP(`--strict-mcp-config`)가 전부 차단되어 다른 공급자와 완전히 동일하게 "채팅만" 수행
 - **모든 대화 턴이 서버에 기록**되어 평가에 활용
 
 ### 3. 전 과정 행동 기록 & 평가 뷰

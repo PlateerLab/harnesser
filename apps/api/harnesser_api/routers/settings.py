@@ -35,6 +35,7 @@ def _out(row: AiProvider) -> AiProviderOut:
         is_eval_default=row.is_eval_default,
         has_key=bool(row.api_key),
         key_hint=_key_hint(row.api_key),
+        supports_host_tools=ai.provider_supports_host_tools(row.provider),
         created_at=row.created_at,
     )
 

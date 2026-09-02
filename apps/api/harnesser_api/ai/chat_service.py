@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import settings
 from ..db import SessionLocal
 from ..models import AiMessage, Assessment, Attempt, Event, Problem
-from ..problem_content import REFERENCE_TOOLS, execute_reference_tool
+from ..problem_content import REFERENCE_TOOLS, execute_reference_tool, render_references_inline
 from . import provider as ai_provider
 
 # 제로 컨텍스트 원칙: 시스템은 시험/문제/코드에 대한 어떤 정보도 주입하지 않는다.
@@ -36,7 +36,25 @@ REFERENCE_SYSTEM_SUFFIX = """
 - 응시자가 "3번 자료", "샘플 CSV" 등으로 자료를 가리키면 먼저 목록을 확인해 정확한 경로를 찾은 뒤 열람하세요.
 - 자료에 없는 외부 수치를 사실처럼 단정하지 말고, 열람한 자료를 근거로 도와주세요."""
 
+# 호스트 도구를 붙일 수 없는 공급자(Claude Code CLI)용 폴백 — 같은 접근 경계를
+# 유지한 채 참고 자료를 프롬프트에 인라인으로 싣는다.
+REFERENCE_INLINE_PREFIX = """
+
+이 문제에는 참고 자료 파일이 첨부되어 있으며, 아래에 그 전체 내용이 포함되어 있습니다.
+- 접근 가능한 것은 아래 참고 자료뿐입니다. 문제 지문·테스트 케이스·다른 파일에는 접근할 수 없습니다.
+- 자료에 없는 외부 수치를 사실처럼 단정하지 말고, 아래 자료를 근거로 도와주세요.
+
+"""
+
 MAX_TOOL_ITERATIONS = 8
+
+
+def build_reference_system_text(res: ai_provider.ResolvedAi, reference_files: list[dict]) -> str:
+    """참고 자료가 있을 때 SYSTEM_PROMPT에 덧붙일 텍스트 — 공급자 능력에 따라
+    도구 안내(호스트 도구 지원) 또는 인라인 전문(비지원)을 선택한다."""
+    if ai_provider.supports_host_tools(res):
+        return REFERENCE_SYSTEM_SUFFIX
+    return REFERENCE_INLINE_PREFIX + render_references_inline(reference_files)
 
 
 class ChatError(Exception):
@@ -132,7 +150,7 @@ async def start_turn(
             problem = await db.get(Problem, problem_id)
             if problem and problem.reference_files:
                 reference_files = list(problem.reference_files)
-                system_text += REFERENCE_SYSTEM_SUFFIX
+                system_text += build_reference_system_text(res, reference_files)
         history_q = (
             select(AiMessage)
             .where(AiMessage.attempt_id == attempt_id)
@@ -233,7 +251,9 @@ async def _generate(
 ) -> None:
     error: str | None = None
     try:
-        if reference_files:
+        # 참고 자료 도구 루프는 호스트 도구를 받는 공급자에서만 — 그렇지 않으면
+        # 자료가 이미 system_text에 인라인되어 있으므로 일반 스트리밍으로 간다.
+        if reference_files and ai_provider.supports_host_tools(res):
             await _run_tool_loop(handle, res, messages, system_text, reference_files)
         else:
             async for delta in ai_provider.stream_text(res, messages, system=system_text):

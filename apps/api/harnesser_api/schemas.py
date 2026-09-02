@@ -212,6 +212,7 @@ class AiProviderOut(BaseModel):
     is_eval_default: bool
     has_key: bool = False
     key_hint: str | None = None
+    supports_host_tools: bool = True
     created_at: datetime
 
 

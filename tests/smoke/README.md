@@ -9,12 +9,14 @@ python3 test_ai_turns.py        # AI 질문 한도/환불 (15)
 python3 test_state_restore.py   # 에디터 상태 저장/복원 (7)
 
 # 다중 LLM 공급자 E2E — 모의 서버 필요:
-python3 mock_llm.py &           # :18001에 OpenAI 호환 모의 서버
+python3 mock_llm.py &           # :18001에 OpenAI 호환 + Anthropic Messages 모의 서버
 # 게이트웨이 IP 확인: docker network inspect harnesser_default -f '{{(index .IPAM.Config 0).Gateway}}'
-python3 test_ai_providers.py "http://<gateway>:18001/v1"   # (24)
+python3 test_ai_providers.py "http://<gateway>:18001/v1"   # (29)
+python3 test_claude_code.py "http://<gateway>:18001"       # Claude Code CLI 공급자 — 실 CLI 스폰 E2E (8)
 ```
 
 ```bash
-# AI 채팅 WebSocket E2E — api 컨테이너 내부에서 실행 (websockets 의존성 내장):
+# WebSocket E2E — api 컨테이너 내부에서 실행 (websockets 의존성 내장):
 docker cp test_ai_ws.py harnesser-api-1:/tmp/ && docker exec harnesser-api-1 python3 /tmp/test_ai_ws.py "http://<gateway>:18001/v1"   # (18)
+docker cp test_authoring_ws.py harnesser-api-1:/tmp/ && docker exec harnesser-api-1 python3 /tmp/test_authoring_ws.py "http://<gateway>:18001/v1"   # (10)
 ```

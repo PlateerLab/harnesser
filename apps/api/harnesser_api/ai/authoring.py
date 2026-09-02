@@ -26,6 +26,15 @@ SYSTEM_PROMPT = """당신은 Harnesser 코딩 테스트 문제 작성 도우미�
 - 지문은 '## 문제 / ## 입력 / ## 출력 / ## 제한 / ## 예시 설명' 구조를 따르고, 테스트는 공개 예시 2개 이상 + 경계값을 포함한 비공개 케이스를 갖추세요.
 - 편집을 마치면 무엇을 바꿨는지 한두 문장으로만 요약하세요."""
 
+# 호스트 도구를 붙일 수 없는 공급자(Claude Code CLI)용 — 도구 없이 도는 턴에
+# "초안을 편집했다"는 거짓 약속이 나오지 않도록 프롬프트 자체를 대화 전용으로 바꾼다.
+CHAT_ONLY_SYSTEM_PROMPT = """당신은 Harnesser 코딩 테스트 문제 작성 도우미입니다.
+
+현재 선택된 LLM 공급자는 도구 호출을 지원하지 않아 초안을 직접 편집할 수 없습니다 — 편집했다고 말하지 마세요.
+- 지문/코드/테스트 등 산출물은 관리자가 그대로 복사해 붙여넣을 수 있는 완성된 형태로 채팅에 제시하세요.
+- 초안 내용은 매 턴 주입되는 '열린 탭' 컨텍스트로만 알 수 있습니다. 모르는 내용은 추측하지 말고 확인을 요청하세요.
+- 지문은 '## 문제 / ## 입력 / ## 출력 / ## 제한 / ## 예시 설명' 구조를 따르고, 테스트는 공개 예시 2개 이상 + 경계값 케이스를 제안하세요."""
+
 _TEST_CASE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -151,6 +160,21 @@ async def run_turn(
 ) -> None:
     """도구 루프 1턴 — messages는 호출자가 유지하는 canonical 대화 이력(직접 변형)."""
     client = ai_provider.build_client(res)
+
+    if not ai_provider.supports_host_tools(res):
+        # 대화 전용 폴백 — 도구 없이 한 번의 완성 호출로 답한다.
+        response = await client.create_message(
+            model_config=ai_provider._model_config(res),
+            messages=messages,
+            system=CHAT_ONLY_SYSTEM_PROMPT,
+            tools=None,
+            purpose="harnesser.authoring.chat_only",
+        )
+        text = (response.text or "").strip()
+        if text:
+            await send({"type": "assistant_text", "req_id": req_id, "text": text})
+        messages.append({"role": "assistant", "content": text or "(응답 없음)"})
+        return
 
     for _ in range(MAX_ITERATIONS):
         response = await client.create_message(

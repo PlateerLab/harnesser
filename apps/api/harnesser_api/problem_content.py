@@ -59,6 +59,40 @@ def execute_reference_tool(name: str, tool_input: dict, reference_files: list[di
         return content[:REFERENCE_READ_CAP] + truncated
     return f"알 수 없는 도구: {name}"
 
+
+# 도구를 붙일 수 없는 공급자(예: Claude Code CLI)를 위한 인라인 폴백 —
+# 같은 접근 경계(이 문제의 참고 자료뿐)를 유지한 채 내용을 프롬프트에 싣는다.
+REFERENCE_INLINE_TOTAL_CAP = 120_000  # 인라인 주입 총량 상한 (문자)
+
+
+def render_references_inline(reference_files: list[dict]) -> str:
+    """참고 자료 전체를 시스템 프롬프트용 텍스트 블록으로 렌더링.
+
+    파일당 REFERENCE_READ_CAP, 전체 REFERENCE_INLINE_TOTAL_CAP으로 제한하고
+    이미지는 목록만 남긴다(도구 경로의 read_reference_file과 동일한 규칙).
+    """
+    if not reference_files:
+        return ""
+    parts: list[str] = ["[참고 자료 목록]"]
+    for f in reference_files:
+        parts.append(f"- {f.get('path')} ({f.get('kind')})")
+    budget = REFERENCE_INLINE_TOTAL_CAP
+    for f in reference_files:
+        path, kind = f.get("path"), f.get("kind")
+        if kind == "image":
+            parts.append(f"\n[참고 자료: {path}]\n(이미지 파일 — 텍스트로 제공되지 않습니다. 필요하면 응시자에게 설명을 요청하세요.)")
+            continue
+        if budget <= 0:
+            parts.append(f"\n[참고 자료: {path}]\n(전체 인라인 한도 초과로 생략)")
+            continue
+        content = str(f.get("content", ""))[:REFERENCE_READ_CAP]
+        if len(content) > budget:
+            content = content[:budget] + "\n…(이하 생략)"
+        budget -= len(content)
+        parts.append(f"\n[참고 자료: {path}]\n{content}")
+    return "\n".join(parts)
+
+
 MAX_REFERENCE_FILES = 40
 MAX_TEXT_CONTENT = 400_000  # 텍스트 파일 1개 상한 (약 400KB)
 MAX_IMAGE_CONTENT = 3_000_000  # data URI 상한 (약 3MB)

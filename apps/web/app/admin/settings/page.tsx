@@ -120,8 +120,9 @@ export default function SettingsPage() {
       </div>
       <p className="mb-6 text-sm text-slate-500">
         AI 활용 테스트의 채팅과 자동평가에 사용할 LLM을 관리합니다. 클라우드(OpenAI · Anthropic · Gemini)와
-        로컬(vLLM · Ollama · LM Studio · OpenAI 호환)을 모두 지원하며, 시험별로 다른 공급자를 지정할 수도
-        있습니다. 채팅은 순수 대화만 사용합니다(에이전트 도구 미사용).
+        로컬(vLLM · Ollama · LM Studio · OpenAI 호환), 그리고 Claude Code CLI를 모두 지원하며, 시험별로
+        다른 공급자를 지정할 수도 있습니다. 채팅은 순수 대화만 사용하며, Claude Code CLI도 내장 도구·스킬이
+        전부 차단된 순수 LLM으로 동작합니다.
       </p>
 
       {/* 유효 설정 배너 */}
@@ -179,11 +180,15 @@ export default function SettingsPage() {
                       <span className="font-bold">{row.name}</span>
                       <span
                         className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold ${
-                          cat?.kind === "local" ? "bg-sky-100 text-sky-700" : "bg-slate-100 text-slate-600"
+                          cat?.kind === "local"
+                            ? "bg-sky-100 text-sky-700"
+                            : cat?.kind === "cli"
+                              ? "bg-amber-100 text-amber-700"
+                              : "bg-slate-100 text-slate-600"
                         }`}
                       >
                         {cat?.label ?? row.provider}
-                        {cat?.kind === "local" ? " · 로컬" : ""}
+                        {cat?.kind === "local" ? " · 로컬" : cat?.kind === "cli" ? " · 순수 LLM 잠금" : ""}
                       </span>
                       {row.is_chat_default && (
                         <span className="shrink-0 whitespace-nowrap rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-700">
@@ -362,7 +367,7 @@ function ProviderModal({
         "/admin/settings/ai/models",
         draftBody(),
       );
-      if (r.source === "live") setModels(r.models);
+      if (r.source === "live" || r.source === "static") setModels(r.models);
       else {
         setModels([]);
         setModelsError(r.error || "모델 목록을 가져올 수 없습니다");
@@ -418,7 +423,7 @@ function ProviderModal({
           <select className={inputCls} value={form.provider} onChange={(e) => changeType(e.target.value)}>
             {meta.catalog.map((c) => (
               <option key={c.provider} value={c.provider}>
-                {c.label} {c.kind === "local" ? "(로컬)" : "(클라우드)"}
+                {c.label} {c.kind === "local" ? "(로컬)" : c.kind === "cli" ? "(CLI)" : "(클라우드)"}
               </option>
             ))}
           </select>
@@ -516,6 +521,12 @@ function ProviderModal({
           )}
         </Field>
 
+        {cat?.kind === "cli" && (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+            이 공급자는 순수 LLM 잠금 모드로 실행됩니다 — CLI 내장 도구·스킬·MCP가 전부 차단되고,
+            temperature·응답 최대 토큰 값은 CLI가 지원하지 않아 무시됩니다.
+          </p>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <Field label="Temperature" hint="0 = 결정적, 높을수록 다양">
             <input

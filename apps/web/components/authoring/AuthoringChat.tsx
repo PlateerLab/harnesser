@@ -167,6 +167,7 @@ export function AuthoringChat({
           {providers.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name} — {p.model}
+              {p.supports_host_tools === false ? " (대화 전용 — 초안 직접 편집 불가)" : ""}
             </option>
           ))}
         </select>
